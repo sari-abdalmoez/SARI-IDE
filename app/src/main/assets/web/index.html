@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SARI IDE</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section id="home">
+  <header class="bar"><div class="brand">SARI <b>IDE</b></div><button id="btnNewProject" class="primary">+ New project</button></header>
+  <div id="projects" class="list"></div>
+  <p id="homeEmpty" class="muted center" hidden>No projects yet. Create your first one.</p>
+</section>
+
+<section id="ide" hidden>
+  <header class="bar">
+    <button id="btnDrawer" class="ic" title="Files">☰</button>
+    <div id="projName" class="pname"></div>
+    <button id="btnRun" class="ic run" title="Run">▶</button>
+    <button id="btnBuild" class="ic" title="Build">⚒</button>
+    <button id="btnSave" class="ic" title="Save (Ctrl+S)">💾</button>
+    <button id="btnMore" class="ic" title="More">⋯</button>
+  </header>
+  <div class="ide-body">
+    <aside id="drawer">
+      <div class="drawer-head">
+        <span>EXPLORER</span>
+        <span>
+          <button id="btnNewFile" class="ic sm" title="New file">＋</button>
+          <button id="btnNewDir" class="ic sm" title="New folder">📁</button>
+          <button id="btnFind" class="ic sm" title="Find file (Ctrl+P)">🔍</button>
+          <button id="btnRefresh" class="ic sm" title="Refresh">⟳</button>
+        </span>
+      </div>
+      <div id="tree"></div>
+    </aside>
+    <main id="main">
+      <div id="tabs"></div>
+      <div id="editorWrap">
+        <pre id="gutter" aria-hidden="true"></pre>
+        <textarea id="ed" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" dir="ltr"></textarea>
+        <div id="empty" class="muted center">Open a file from the explorer</div>
+      </div>
+      <div id="keys">
+        <button data-ins="    ">Tab</button><button data-ins="{">{</button><button data-ins="}">}</button>
+        <button data-ins="(">(</button><button data-ins=")">)</button><button data-ins="[">[</button><button data-ins="]">]</button>
+        <button data-ins=";">;</button><button data-ins="&quot;">"</button><button data-ins="=">=</button>
+        <button data-ins="&lt;">&lt;</button><button data-ins="&gt;">&gt;</button>
+        <button id="kUndo">↶</button><button id="kRedo">↷</button>
+      </div>
+      <div id="status"><span id="stFile"></span><span id="stPos"></span></div>
+    </main>
+  </div>
+  <div id="scrim"></div>
+</section>
+
+<div id="preview" hidden>
+  <div class="bar"><div class="pname">Preview</div><button id="btnClosePreview" class="ic">✕</button></div>
+  <iframe id="frame" sandbox="allow-scripts"></iframe>
+</div>
+
+<div id="modal" hidden><div class="card">
+  <h3 id="mTitle"></h3><p id="mText" class="muted"></p>
+  <input id="mInput" autocapitalize="off" autocomplete="off" dir="ltr">
+  <select id="mSelect"></select>
+  <div class="actions"><button id="mCancel">Cancel</button><button id="mOk" class="primary">OK</button></div>
+</div></div>
+
+<div id="sheetWrap" hidden><div id="sheet"></div></div>
+<div id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

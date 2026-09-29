@@ -110,6 +110,15 @@ class FileManager(projectDir: File) {
         return rel(target)
     }
 
+    /** All file paths (relative, forward-slash) under the project, skipping VCS/build clutter. Used for GitHub push. */
+    fun allFiles(): List<String> {
+        val out = mutableListOf<String>()
+        for (f in root.walkTopDown().onEnter { it.name !in skipDirs }) {
+            if (f.isFile) out.add(rel(f))
+        }
+        return out
+    }
+
     fun search(query: String): JSONArray {
         val q = query.trim().lowercase()
         val arr = JSONArray()

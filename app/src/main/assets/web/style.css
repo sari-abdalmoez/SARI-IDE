@@ -57,3 +57,37 @@ button.run{color:#66bb6a}
 #sheet button{display:block;width:100%;text-align:start;border:0;border-radius:0;background:transparent;padding:14px 20px}
 #sheet button.danger{color:var(--danger)}
 #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;z-index:200;max-width:90vw;font-size:13px}
+
+/* ---- Phase 2 additions: GitHub, Settings, Terminal, run detail ---- */
+#githubScreen,#runDetail,#settingsScreen,#termuxScreen{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;flex-direction:column}
+.screen-body{flex:1;overflow:auto;padding:12px}
+.formCard{padding:4px 4px 16px}
+.formCard h3{margin:6px 0 14px}
+.formCard label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+.formCard input,#tmInputRow input{width:100%;padding:11px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:8px;font:inherit}
+button.block{width:100%;margin-top:16px}
+.small{font-size:11px;margin-top:10px;line-height:1.5}
+.sectionTitle{font-size:11px;letter-spacing:1px;color:var(--muted);margin:18px 4px 8px}
+.rowButtons{display:flex;flex-wrap:wrap;gap:8px}
+.rowButtons button{flex:1;min-width:110px}
+.badge{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--panel2);color:var(--muted)}
+.badge.ok{color:#66bb6a}
+.badge.fail{color:var(--danger)}
+.badge.run{color:#ffb74d}
+.logbox{background:#000a;color:#c9d6df;font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:50vh}
+.termOut{flex:1;max-height:none;border-radius:0;margin:0}
+#tmInputRow{display:flex;gap:6px;padding:8px;background:var(--panel);border-top:1px solid var(--line)}
+#tmInputRow input{flex:1}
+.drawer-foot{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line);padding:4px 0}
+.drawer-foot button{text-align:start;background:transparent;border:0;padding:10px 12px;font-size:13px}
+.run-item{padding:12px;margin-bottom:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lang-item{display:flex;align-items:center;gap:10px;padding:12px;margin-bottom:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.lang-item .ico{font-size:20px}
+.lang-item .t{flex:1}
+.row.longpress{background:var(--panel2)}
+#busy{position:fixed;inset:0;background:#000a;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff}
+.spin{width:34px;height:34px;border:3px solid #ffffff44;border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#findBar{display:flex;gap:4px;align-items:center;padding:6px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap}
+#findBar input{flex:1;min-width:90px;padding:7px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit}
+#findBar .muted{font-size:11px;white-space:nowrap}

@@ -9,7 +9,12 @@
 <body>
 
 <section id="home">
-  <header class="bar"><div class="brand">SARI <b>IDE</b></div><button id="btnNewProject" class="primary">+ New project</button></header>
+  <header class="bar">
+    <div class="brand">SARI <b>IDE</b></div>
+    <button id="btnGithubHome" class="ic" title="GitHub">🐙</button>
+    <button id="btnSettingsHome" class="ic" title="Settings">⚙️</button>
+    <button id="btnNewProject" class="primary">+ New project</button>
+  </header>
   <div id="projects" class="list"></div>
   <p id="homeEmpty" class="muted center" hidden>No projects yet. Create your first one.</p>
 </section>
@@ -21,6 +26,7 @@
     <button id="btnRun" class="ic run" title="Run">▶</button>
     <button id="btnBuild" class="ic" title="Build">⚒</button>
     <button id="btnSave" class="ic" title="Save (Ctrl+S)">💾</button>
+    <button id="btnEditorMenu" class="ic" title="Editor menu">⋮</button>
     <button id="btnMore" class="ic" title="More">⋯</button>
   </header>
   <div class="ide-body">
@@ -30,11 +36,17 @@
         <span>
           <button id="btnNewFile" class="ic sm" title="New file">＋</button>
           <button id="btnNewDir" class="ic sm" title="New folder">📁</button>
+          <button id="btnImportFile" class="ic sm" title="Import file">⬆️</button>
+          <button id="btnImportFolder" class="ic sm" title="Import folder">📥</button>
           <button id="btnFind" class="ic sm" title="Find file (Ctrl+P)">🔍</button>
           <button id="btnRefresh" class="ic sm" title="Refresh">⟳</button>
         </span>
       </div>
       <div id="tree"></div>
+      <div class="drawer-foot">
+        <button id="btnGithubDrawer" class="ic sm" title="GitHub">🐙 GitHub</button>
+        <button id="btnSettingsDrawer" class="ic sm" title="Settings">⚙️ Settings</button>
+      </div>
     </aside>
     <main id="main">
       <div id="tabs"></div>
@@ -42,6 +54,16 @@
         <pre id="gutter" aria-hidden="true"></pre>
         <textarea id="ed" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" dir="ltr"></textarea>
         <div id="empty" class="muted center">Open a file from the explorer</div>
+      </div>
+      <div id="findBar" hidden>
+        <input id="fbFind" placeholder="Find">
+        <input id="fbReplace" placeholder="Replace" hidden>
+        <button id="fbPrev" class="ic sm">↑</button>
+        <button id="fbNext" class="ic sm">↓</button>
+        <button id="fbReplaceOne" class="ic sm" hidden>1</button>
+        <button id="fbReplaceAll" class="ic sm" hidden>All</button>
+        <span id="fbCount" class="muted"></span>
+        <button id="fbClose" class="ic sm">✕</button>
       </div>
       <div id="keys">
         <button data-ins="    ">Tab</button><button data-ins="{">{</button><button data-ins="}">}</button>
@@ -61,6 +83,67 @@
   <iframe id="frame" sandbox="allow-scripts"></iframe>
 </div>
 
+<section id="githubScreen" hidden>
+  <header class="bar"><button id="ghBack" class="ic">←</button><div class="pname">GitHub</div><button id="ghRefresh" class="ic" title="Refresh">⟳</button></header>
+  <div class="screen-body">
+    <div id="ghDisconnected" class="formCard">
+      <h3>Connect a repository</h3>
+      <label>GitHub username</label><input id="ghUser" autocapitalize="off" autocomplete="off">
+      <label>Personal Access Token</label><input id="ghToken" type="password" autocapitalize="off" autocomplete="off">
+      <label>Repository (owner/repo)</label><input id="ghRepo" placeholder="octocat/hello-world" autocapitalize="off" autocomplete="off">
+      <label>Branch (leave empty for default)</label><input id="ghBranch" placeholder="main" autocapitalize="off" autocomplete="off">
+      <button id="ghConnect" class="primary block">Connect GitHub</button>
+      <p class="muted small">The token is stored only in this device's encrypted app storage. It is never written into a project or committed.</p>
+    </div>
+    <div id="ghConnected" class="list" hidden>
+      <div class="card-item">
+        <div class="t"><div id="ghStatusLine">Connected</div><div id="ghRepoLine" class="muted"></div></div>
+        <button id="ghDisconnect" class="ic">⏏</button>
+      </div>
+      <div class="sectionTitle">Repository (project: <span id="ghProjName"></span>)</div>
+      <div class="rowButtons">
+        <button id="ghPullAll">⬇ Pull all</button>
+        <button id="ghPushAll">⬆ Push all</button>
+        <button id="ghBranches">🌿 Branches</button>
+      </div>
+      <div class="sectionTitle">Build (GitHub Actions)</div>
+      <div class="rowButtons"><button id="ghTrigger" class="primary">▶ Trigger build</button></div>
+      <div id="ghRuns"></div>
+    </div>
+  </div>
+</section>
+
+<section id="runDetail" hidden>
+  <header class="bar"><button id="rdBack" class="ic">←</button><div class="pname">Build</div><button id="rdRefresh" class="ic">⟳</button></header>
+  <div class="screen-body">
+    <div id="rdStatus" class="card-item"></div>
+    <div id="rdArtifacts"></div>
+    <div class="sectionTitle">Logs</div>
+    <pre id="rdLogs" class="logbox"></pre>
+  </div>
+</section>
+
+<section id="settingsScreen" hidden>
+  <header class="bar"><button id="stBack" class="ic">←</button><div class="pname">Settings</div></header>
+  <div class="screen-body">
+    <div class="sectionTitle">Appearance</div>
+    <div class="rowButtons">
+      <button id="stTheme">Toggle light / dark</button>
+      <button id="stFontUp">Font +</button>
+      <button id="stFontDown">Font −</button>
+    </div>
+    <div class="sectionTitle">Programming languages (via Termux)</div>
+    <p id="stTermuxWarn" class="muted small" hidden>Termux was not detected. Install Termux (F-Droid / GitHub build) to install and run languages.</p>
+    <div id="langList" class="list"></div>
+  </div>
+</section>
+
+<section id="termuxScreen" hidden>
+  <header class="bar"><button id="tmBack" class="ic">←</button><div class="pname">Terminal</div><button id="tmClear" class="ic">🧹</button></header>
+  <pre id="tmOutput" class="logbox termOut"></pre>
+  <div id="tmInputRow"><input id="tmInput" placeholder="command" autocapitalize="off" autocomplete="off" dir="ltr"><button id="tmRun" class="primary">Run</button></div>
+</section>
+
 <div id="modal" hidden><div class="card">
   <h3 id="mTitle"></h3><p id="mText" class="muted"></p>
   <input id="mInput" autocapitalize="off" autocomplete="off" dir="ltr">
@@ -70,6 +153,7 @@
 
 <div id="sheetWrap" hidden><div id="sheet"></div></div>
 <div id="toast" hidden></div>
+<div id="busy" hidden><div class="spin"></div><div id="busyText"></div></div>
 
 <script src="app.js"></script>
 </body>

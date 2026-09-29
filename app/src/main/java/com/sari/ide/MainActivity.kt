@@ -23,6 +23,7 @@ import androidx.webkit.WebViewFeature
 import com.sari.ide.bridge.DocumentPicker
 import com.sari.ide.bridge.NativeBridge
 import com.sari.ide.bridge.SystemActions
+import com.sari.ide.bridge.TermuxBridge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,7 @@ class MainActivity : AppCompatActivity(), DocumentPicker, SystemActions {
 
     private var pendingFiles: CompletableDeferred<List<Uri>>? = null
     private var pendingFolder: CompletableDeferred<Uri?>? = null
+    private var pendingTermuxPerm: CompletableDeferred<Boolean>? = null
 
     private val filesLauncher = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         pendingFiles?.complete(uris ?: emptyList()); pendingFiles = null
@@ -52,6 +54,17 @@ class MainActivity : AppCompatActivity(), DocumentPicker, SystemActions {
             try { contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) { }
         }
         pendingFolder?.complete(uri); pendingFolder = null
+    }
+    private val termuxPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        pendingTermuxPerm?.complete(granted); pendingTermuxPerm = null
+    }
+
+    override suspend fun ensureTermuxPermission(): Boolean {
+        if (TermuxBridge.hasPermission(this)) return true
+        val d = CompletableDeferred<Boolean>()
+        pendingTermuxPerm = d
+        termuxPermLauncher.launch(TermuxBridge.PERMISSION)
+        return d.await()
     }
 
     override suspend fun pickFiles(): List<Uri> {
@@ -91,6 +104,7 @@ class MainActivity : AppCompatActivity(), DocumentPicker, SystemActions {
         super.onCreate(savedInstanceState)
 
         bridge = NativeBridge(applicationContext, projectsRootDir(), this, this)
+        TermuxBridge.permissionChecker = { ensureTermuxPermission() }
         if (!hasSharedStorageAccess()) {
             Toast.makeText(this, "Tip: enable file access in Settings to let Termux build and run your projects", Toast.LENGTH_LONG).show()
         }

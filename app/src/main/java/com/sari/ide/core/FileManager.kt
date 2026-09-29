@@ -33,6 +33,26 @@ class FileManager(projectDir: File) {
         return text
     }
 
+    /** Byte-exact read, for anything that may be binary (images, archives, etc.) — used by GitHub sync. */
+    fun readBytes(path: String): ByteArray {
+        val f = PathGuard.resolve(root, path)
+        require(f.isFile) { "Not a file" }
+        require(f.length() <= 20L * 1024 * 1024) { "File is larger than 20 MB" }
+        return f.readBytes()
+    }
+
+    fun writeBytes(path: String, bytes: ByteArray) {
+        val f = PathGuard.resolve(root, path)
+        require(!f.isDirectory) { "Target is a folder" }
+        f.parentFile?.mkdirs()
+        val tmp = File(f.parentFile, f.name + ".sari-tmp")
+        tmp.writeBytes(bytes)
+        if (!tmp.renameTo(f)) {
+            f.delete()
+            check(tmp.renameTo(f)) { "Save failed" }
+        }
+    }
+
     fun write(path: String, content: String) {
         val f = PathGuard.resolve(root, path)
         require(!f.isDirectory) { "Target is a folder" }

@@ -91,3 +91,37 @@ button.block{width:100%;margin-top:16px}
 #findBar{display:flex;gap:4px;align-items:center;padding:6px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap}
 #findBar input{flex:1;min-width:90px;padding:7px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit}
 #findBar .muted{font-size:11px;white-space:nowrap}
+
+/* ---- Phase 3: icon system, console panel ---- */
+.icon{width:19px;height:19px;display:block;flex-shrink:0}
+button.ic{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px}
+button.ic.sm{min-width:32px;min-height:32px}
+button.ic.sm .icon{width:16px;height:16px}
+.brand{display:flex;align-items:center;gap:6px}
+button.primary{display:inline-flex;align-items:center;gap:6px}
+button.primary .icon{width:16px;height:16px}
+.drawer-foot button{display:flex;align-items:center;gap:10px}
+.drawer-foot button .icon{width:17px;height:17px;color:var(--muted)}
+.run-item, .card-item{gap:10px}
+#consolePanel{display:flex;flex-direction:column;border-top:1px solid var(--line);background:var(--bg);max-height:46vh}
+.console-head{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line);font-size:12px}
+.console-head .sm-icon svg{width:15px;height:15px}
+.console-head .ctitle{font-weight:600;letter-spacing:.5px}
+.console-head .spacer{flex:1}
+.consoleBox{flex:1;margin:0;border-radius:0;max-height:none}
+#consoleStdinRow{display:flex;gap:6px;padding:6px;background:var(--panel);border-top:1px solid var(--line)}
+#consoleStdinRow input{flex:1;padding:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}
+.termuxNote{padding:6px 10px 0}
+
+/* ---- icon-in-sheet / dynamic icon wrappers ---- */
+.icowrap{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.icowrap svg{width:17px;height:17px}
+#sheet button{display:flex;align-items:center;gap:12px}
+.row .icowrap svg,.lang-item .icowrap svg{width:18px;height:18px;color:var(--muted)}
+.row .m .icowrap svg{width:16px;height:16px}
+.tab .x{display:inline-flex}
+.tab .x .icowrap svg{width:13px;height:13px}
+#btnConsole.running{color:#ffb74d}
+#btnConsole.running .icon{animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.card-item .icowrap svg{width:17px;height:17px}

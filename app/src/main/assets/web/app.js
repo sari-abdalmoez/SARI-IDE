@@ -1,6 +1,7 @@
 'use strict';
 const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const icoEl = (name, cls) => { const s = el('span', 'icowrap' + (cls ? ' ' + cls : '')); s.innerHTML = iconSvg(name); return s; };
 
 // ---------- native bridge ----------
 const pending = new Map();
@@ -32,6 +33,7 @@ const expanded = new Set(['']);
 const cache = new Map();
 let fontSize = +localStorage.getItem('fontSize') || 14;
 let autoSave = localStorage.getItem('autoSave') !== 'off';
+let isAndroidProject = false;
 applyFont();
 document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';
 
@@ -64,6 +66,7 @@ function sheet(items) {
   const box = $('#sheet'); box.textContent = '';
   items.forEach(it => {
     const b = el('button', it.danger ? 'danger' : '', it.label);
+    if (it.icon) { b.textContent = ''; b.append(icoEl(it.icon), el('span', '', it.label)); }
     b.onclick = () => { closeSheet(); it.fn(); };
     box.appendChild(b);
   });
@@ -88,14 +91,14 @@ async function showHome() {
     list.forEach(p => {
       const card = el('div', 'card-item');
       const t = el('div', 't');
-      t.append(el('div', '', p.name), el('div', '', (p.language || 'project') + ' · ' + new Date(p.modified).toLocaleDateString()));
+      t.append(el('div', '', p.name), el('div', '', (p.language || 'project') + ' \u00b7 ' + new Date(p.modified).toLocaleDateString()));
       t.onclick = () => openProject(p.name);
-      const m = el('button', 'ic', '⋮');
+      const m = el('button', 'ic sm'); m.appendChild(icoEl('more-vert'));
       m.onclick = () => sheet([
-        { label: 'Open', fn: () => openProject(p.name) },
-        { label: 'Rename', fn: () => renameProject(p.name) },
-        { label: 'Duplicate', fn: () => call('duplicateProject', { name: p.name }).then(showHome).catch(fail) },
-        { label: 'Delete', danger: true, fn: () => deleteProject(p.name) },
+        { label: 'Open', icon: 'folder-open', fn: () => openProject(p.name) },
+        { label: 'Rename', icon: 'file', fn: () => renameProject(p.name) },
+        { label: 'Duplicate', icon: 'copy', fn: () => call('duplicateProject', { name: p.name }).then(showHome).catch(fail) },
+        { label: 'Delete', icon: 'trash', danger: true, fn: () => deleteProject(p.name) },
       ]);
       card.append(t, m); box.appendChild(card);
     });
@@ -120,16 +123,23 @@ let projectLang = '';
 async function openProject(name) {
   project = name; tabs = []; active = -1; clip = null; projectLang = '';
   expanded.clear(); expanded.add(''); cache.clear();
-  closeScreens();
+  closeScreens(); closeConsole();
   $('#home').hidden = true; $('#ide').hidden = false; $('#ide').classList.remove('open');
   $('#projName').textContent = name;
   renderTabs(); showActive();
   try {
     await refreshTree();
+    detectAndroidProject();
     const meta = JSON.parse(await call('readFile', { project, path: '.sari/project.json' }));
     projectLang = meta.language || '';
     if (meta.run) await openFile(meta.run);
   } catch (e) { /* project may have no run file */ }
+}
+function detectAndroidProject() {
+  const root = cache.get('') || [];
+  isAndroidProject = root.some(it => it.dir && it.name === 'app') &&
+    root.some(it => !it.dir && /^settings\.gradle/.test(it.name));
+  $('#btnBuild').style.display = isAndroidProject ? '' : 'none';
 }
 async function refreshTree() {
   for (const d of [...expanded]) {
@@ -146,8 +156,8 @@ function renderTree() {
       const row = el('div', 'row');
       row.style.paddingInlineStart = (8 + depth * 14) + 'px';
       const open = expanded.has(p);
-      row.append(el('span', '', it.dir ? (open ? '▾ 📂' : '▸ 📁') : '📄'), el('span', 'n', it.name));
-      const m = el('span', 'm', '⋮');
+      row.append(icoEl(it.dir ? (open ? 'folder-open' : 'folder') : 'file'), el('span', 'n', it.name));
+      const m = el('span', 'm'); m.appendChild(icoEl('more-vert'));
       m.onclick = e => { e.stopPropagation(); entryMenu(p, it.dir); };
       row.appendChild(m);
       let lpTimer = null, lpFired = false, sx = 0, sy = 0;
@@ -173,16 +183,16 @@ function renderTree() {
 }
 function entryMenu(p, isDir) {
   const items = [];
-  items.push({ label: 'Open', fn: () => isDir ? null : openFile(p) });
+  items.push({ label: 'Open', icon: 'folder-open', fn: () => isDir ? null : openFile(p) });
   if (isDir) items.push(
-    { label: 'New file here', fn: () => newEntry('createFile', p) },
-    { label: 'New folder here', fn: () => newEntry('createDir', p) });
+    { label: 'New file here', icon: 'file-plus', fn: () => newEntry('createFile', p) },
+    { label: 'New folder here', icon: 'folder-plus', fn: () => newEntry('createDir', p) });
   items.push(
-    { label: 'Move', fn: () => moveEntry(p) },
-    { label: 'Copy', fn: () => { clip = { path: p, mode: 'copy' }; toast('Copied — open a folder\'s menu and choose Paste here'); } },
-    { label: 'Rename', fn: () => renameEntry(p) });
-  if (isDir && clip) items.push({ label: 'Paste here', fn: () => paste(p) });
-  items.push({ label: 'Delete', danger: true, fn: () => deleteEntry(p) });
+    { label: 'Move', icon: 'folder-open', fn: () => moveEntry(p) },
+    { label: 'Copy', icon: 'copy', fn: () => { clip = { path: p, mode: 'copy' }; toast('Copied \u2014 open a folder\'s menu and choose Paste here'); } },
+    { label: 'Rename', icon: 'file', fn: () => renameEntry(p) });
+  if (isDir && clip) items.push({ label: 'Paste here', icon: 'download', fn: () => paste(p) });
+  items.push({ label: 'Delete', icon: 'trash', danger: true, fn: () => deleteEntry(p) });
   sheet(items);
 }
 async function newEntry(op, dir = '') {
@@ -191,7 +201,7 @@ async function newEntry(op, dir = '') {
   try {
     const path = await call(op, { project, dir, name: name.trim() });
     if (dir) expanded.add(dir);
-    await refreshTree();
+    await refreshTree(); detectAndroidProject();
     if (op === 'createFile') await openFile(path);
   } catch (e) { fail(e); }
 }
@@ -222,7 +232,7 @@ async function deleteEntry(p) {
   try {
     await call('delete', { project, path: p });
     for (let i = tabs.length - 1; i >= 0; i--) if (tabs[i].path === p || tabs[i].path.startsWith(p + '/')) removeTab(i, true);
-    await refreshTree();
+    await refreshTree(); detectAndroidProject();
   } catch (e) { fail(e); }
 }
 async function paste(dir) {
@@ -238,18 +248,18 @@ async function findFile() {
   try {
     const res = await call('search', { project, query: q });
     if (!res.length) return toast('No matches');
-    sheet(res.slice(0, 30).map(p => ({ label: p, fn: () => openFile(p) })));
+    sheet(res.slice(0, 30).map(p => ({ label: p, icon: 'file', fn: () => openFile(p) })));
   } catch (e) { fail(e); }
 }
 async function importFiles() {
   try {
-    const names = await busy('Importing…', () => call('importFiles', { project, dir: '' }));
+    const names = await busy('Importing\u2026', () => call('importFiles', { project, dir: '' }));
     if (names && names.length) { await refreshTree(); toast('Imported ' + names.length + ' file(s)'); }
   } catch (e) { fail(e); }
 }
 async function importFolder() {
   try {
-    const name = await busy('Importing folder…', () => call('importFolder', { project, dir: '' }));
+    const name = await busy('Importing folder\u2026', () => call('importFolder', { project, dir: '' }));
     if (name) { await refreshTree(); toast('Imported "' + name + '"'); }
   } catch (e) { fail(e); }
 }
@@ -264,7 +274,7 @@ function updateGutter() {
 }
 function updateStatus() {
   const t = tabs[active];
-  $('#stFile').textContent = t ? t.path + (t.dirty ? ' •' : '') : '';
+  $('#stFile').textContent = t ? t.path + (t.dirty ? ' \u2022' : '') : '';
   if (!t) return $('#stPos').textContent = '';
   const before = ed.value.slice(0, ed.selectionStart).split('\n');
   $('#stPos').textContent = 'Ln ' + before.length + ', Col ' + (before[before.length - 1].length + 1);
@@ -281,8 +291,8 @@ function renderTabs() {
   tabs.forEach((t, i) => {
     const d = el('div', 'tab' + (i === active ? ' on' : ''));
     d.append(el('span', '', t.path.split('/').pop()));
-    if (t.dirty) d.append(el('span', 'dot', '●'));
-    const x = el('span', 'x', '✕');
+    if (t.dirty) d.append(el('span', 'dot', '\u25cf'));
+    const x = el('span', 'x'); x.appendChild(icoEl('close'));
     x.onclick = e => { e.stopPropagation(); removeTab(i); };
     d.append(x);
     d.onclick = () => activate(i);
@@ -395,11 +405,62 @@ async function goToLine() {
   updateStatus();
 }
 $('#btnEditorMenu').onclick = () => sheet([
-  { label: 'Search', fn: () => doSearch(false) },
-  { label: 'Search & Replace', fn: () => doSearch(true) },
-  { label: 'Go to line', fn: goToLine },
-  { label: 'Auto-save: ' + (autoSave ? 'On (tap to turn off)' : 'Off (tap to turn on)'), fn: () => { autoSave = !autoSave; localStorage.setItem('autoSave', autoSave ? 'on' : 'off'); toast('Auto-save ' + (autoSave ? 'on' : 'off')); } },
+  { label: 'Search', icon: 'search', fn: () => doSearch(false) },
+  { label: 'Search & Replace', icon: 'search', fn: () => doSearch(true) },
+  { label: 'Go to line', icon: 'more-horiz', fn: goToLine },
+  { label: 'Console Output', icon: 'console', fn: openConsole },
+  { label: 'Termux Terminal', icon: 'terminal', fn: openTerminal },
+  { label: 'GitHub', icon: 'github', fn: openGithubScreen },
+  { label: 'Settings', icon: 'settings', fn: openSettings },
+  { label: 'Auto-save: ' + (autoSave ? 'On' : 'Off'), icon: 'check', fn: () => { autoSave = !autoSave; localStorage.setItem('autoSave', autoSave ? 'on' : 'off'); toast('Auto-save ' + (autoSave ? 'on' : 'off')); } },
+  { label: 'Toggle light / dark theme', icon: 'settings', fn: () => { const d = document.documentElement, n = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = n; localStorage.setItem('theme', n); } },
+  { label: 'Close project', icon: 'back', fn: showHome },
 ]);
+
+// ============================================================
+// Console Output (per-run output; NOT the Termux Terminal)
+// ============================================================
+let lastRunCommand = null, consoleBusy = false;
+function openConsole() { $('#consolePanel').hidden = false; }
+function closeConsole() { $('#consolePanel').hidden = true; }
+$('#btnConsole').onclick = () => { $('#consolePanel').hidden ? openConsole() : closeConsole(); };
+$('#cClose').onclick = closeConsole;
+$('#cClear').onclick = () => { $('#consoleOutput').textContent = ''; };
+$('#cCopy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('#consoleOutput').textContent); toast('Copied'); }
+  catch (e) { toast('Copy failed'); }
+};
+function consoleWrite(text) {
+  const box = $('#consoleOutput');
+  const MAX = 200000;
+  box.textContent += (box.textContent ? '\n' : '') + text;
+  if (box.textContent.length > MAX) box.textContent = '\u2026(truncated)\u2026\n' + box.textContent.slice(-MAX);
+  box.scrollTop = box.scrollHeight;
+}
+function setConsoleRunning(on) {
+  consoleBusy = on;
+  const badge = $('#consoleStatus');
+  badge.hidden = !on; badge.textContent = on ? 'running' : '';
+  $('#btnConsole').classList.toggle('running', on);
+}
+async function runCommandInConsole(command, label) {
+  openConsole();
+  lastRunCommand = command;
+  consoleWrite('$ ' + command);
+  setConsoleRunning(true);
+  try {
+    const stdin = $('#consoleStdin').value || null;
+    const r = await call('termux.run', { project, path: '', command, stdin });
+    if (r.stdout) consoleWrite(r.stdout.replace(/\s+$/, ''));
+    if (r.stderr) consoleWrite(r.stderr.replace(/\s+$/, ''));
+    consoleWrite('Process finished with exit code ' + r.exitCode);
+  } catch (e) {
+    consoleWrite('error: ' + e.message);
+  } finally {
+    setConsoleRunning(false);
+  }
+}
+$('#consoleRerun').onclick = () => { if (lastRunCommand) runCommandInConsole(lastRunCommand); };
 
 // ---------- run / build ----------
 const ext = p => (p.split('.').pop() || '').toLowerCase();
@@ -407,10 +468,10 @@ const RUN_CMD = {
   python: f => `python3 '${f}'`,
   javascript: f => `node '${f}'`,
   bash: f => `bash '${f}'`,
-  c: f => `clang '${f}' -O2 -o /data/data/com.termux/files/usr/tmp/sari_run && /data/data/com.termux/files/usr/tmp/sari_run`,
-  cpp: f => `clang++ '${f}' -O2 -o /data/data/com.termux/files/usr/tmp/sari_run && /data/data/com.termux/files/usr/tmp/sari_run`,
-  java: f => `javac '${f}' -d /data/data/com.termux/files/usr/tmp/sari_java && java -cp /data/data/com.termux/files/usr/tmp/sari_java ${f.split('/').pop().replace(/\\.java$/, '')}`,
-  kotlin: f => `kotlinc '${f}' -include-runtime -d /data/data/com.termux/files/usr/tmp/sari_run.jar && java -jar /data/data/com.termux/files/usr/tmp/sari_run.jar`,
+  c: f => `clang '${f}' -O2 -o /data/data/com.termux/files/usr/tmp/sari_run && echo '--- run ---' && /data/data/com.termux/files/usr/tmp/sari_run`,
+  cpp: f => `clang++ '${f}' -O2 -o /data/data/com.termux/files/usr/tmp/sari_run && echo '--- run ---' && /data/data/com.termux/files/usr/tmp/sari_run`,
+  java: f => `javac '${f}' -d /data/data/com.termux/files/usr/tmp/sari_java && echo '--- run ---' && java -cp /data/data/com.termux/files/usr/tmp/sari_java ${f.split('/').pop().replace(/\.java$/, '')}`,
+  kotlin: f => `kotlinc '${f}' -include-runtime -d /data/data/com.termux/files/usr/tmp/sari_run.jar && echo '--- run ---' && java -jar /data/data/com.termux/files/usr/tmp/sari_run.jar`,
 };
 async function run() {
   if (!project) return;
@@ -424,8 +485,8 @@ async function run() {
   const lang = projectLang || (t ? guessLang(t.path) : '');
   const builder = RUN_CMD[lang];
   const file = (t ? t.path : null);
-  if (!builder || !file) return toast('No runnable file for this language yet.');
-  await runInTerminal(builder(file), 'Run: ' + file);
+  if (!builder || !file) { openConsole(); consoleWrite('No runnable file recognized for this language yet.'); return; }
+  await runCommandInConsole(builder(file), 'Run: ' + file);
 }
 function guessLang(path) {
   const e = ext(path);
@@ -451,35 +512,26 @@ async function previewHtml(path) {
 }
 async function build() {
   if (!project) return;
+  if (!isAndroidProject) { toast('This project has no app/ + settings.gradle, so it cannot produce an APK.'); return; }
   const st = await call('github.status').catch(() => ({ connected: false }));
-  if (!st.connected) { toast('Connect GitHub first (🐙) to build with GitHub Actions'); return openGithubScreen(); }
+  if (!st.connected) { toast('Connect GitHub first to build with GitHub Actions'); return openGithubScreen(); }
   if (!await modal({ title: 'Build with GitHub Actions', text: 'This pushes every file in "' + project + '" to ' + st.repo + ' (' + st.branch + ') and triggers the Android build workflow.', ok: 'Push & Build' })) return;
   try {
-    const count = await busy('Pushing project…', () => call('github.pushAll', { project, message: 'Update ' + project + ' via SARI IDE' }));
+    const count = await busy('Pushing project\u2026', () => call('github.pushAll', { project, message: 'Update ' + project + ' via SARI IDE' }));
     toast('Pushed ' + count + ' file(s)');
-    const run = await busy('Starting workflow…', () => call('github.triggerWorkflow', { workflowFile: 'android-build.yml', ref: st.branch }));
+    const run = await busy('Starting workflow\u2026', () => call('github.triggerWorkflow', { workflowFile: 'android-build.yml', ref: st.branch }));
     openGithubScreen();
     if (run && run.id) openRunDetail(run.id); else refreshGithubRuns();
   } catch (e) { fail(e); }
 }
 
-// ---------- menus & shortcuts ----------
-function moreMenu() {
-  sheet([
-    { label: 'Terminal', fn: openTerminal },
-    { label: 'GitHub', fn: openGithubScreen },
-    { label: 'Settings', fn: openSettings },
-    { label: 'Toggle light / dark theme', fn: () => { const d = document.documentElement, n = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = n; localStorage.setItem('theme', n); } },
-    { label: 'Close project', fn: showHome },
-  ]);
-}
+// ---------- top-level buttons ----------
 $('#btnNewProject').onclick = newProject;
 $('#btnDrawer').onclick = () => $('#ide').classList.toggle('open');
 $('#scrim').onclick = () => $('#ide').classList.remove('open');
 $('#btnRun').onclick = run;
 $('#btnBuild').onclick = build;
 $('#btnSave').onclick = manualSave;
-$('#btnMore').onclick = moreMenu;
 $('#btnNewFile').onclick = () => newEntry('createFile', '');
 $('#btnNewDir').onclick = () => newEntry('createDir', '');
 $('#btnImportFile').onclick = importFiles;
@@ -507,7 +559,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveA
 // ============================================================
 function openGithubScreen() {
   showScreen('#githubScreen');
-  $('#ghProjName').textContent = project || '(none — open a project first)';
+  $('#ghProjName').textContent = project || '(none \u2014 open a project first)';
   refreshGithubStatus();
 }
 $('#ghBack').onclick = closeScreens;
@@ -519,7 +571,7 @@ async function refreshGithubStatus() {
     $('#ghConnected').hidden = !st.connected;
     if (st.connected) {
       $('#ghStatusLine').textContent = 'Connected as ' + st.username;
-      $('#ghRepoLine').textContent = st.repo + ' · branch ' + st.branch;
+      $('#ghRepoLine').textContent = st.repo + ' \u00b7 branch ' + st.branch;
       refreshGithubRuns();
     }
   } catch (e) { fail(e); }
@@ -528,7 +580,7 @@ $('#ghConnect').onclick = async () => {
   const username = $('#ghUser').value.trim(), token = $('#ghToken').value, repo = $('#ghRepo').value.trim(), branch = $('#ghBranch').value.trim();
   if (!username || !token || !repo) return toast('Username, token and repository are required');
   try {
-    await busy('Connecting…', () => call('github.connect', { username, token, repo, branch }));
+    await busy('Connecting\u2026', () => call('github.connect', { username, token, repo, branch }));
     $('#ghToken').value = '';
     toast('Connected'); refreshGithubStatus();
   } catch (e) { fail(e); }
@@ -537,30 +589,57 @@ $('#ghDisconnect').onclick = async () => {
   if (!await modal({ title: 'Disconnect GitHub?', ok: 'Disconnect' })) return;
   await call('github.disconnect'); refreshGithubStatus();
 };
+$('#ghImportRepo').onclick = async () => {
+  const name = await modal({ title: 'Import repository as project', text: 'Creates a new local project and pulls every file from the connected repo/branch into it.', value: '' });
+  if (!name || !name.trim()) return;
+  try {
+    const res = await busy('Importing repository\u2026', () => call('github.importRepo', { project: name.trim() }));
+    toast('Imported ' + res.imported + ' file(s)');
+    closeScreens(); await openProject(res.project);
+  } catch (e) { fail(e); }
+};
+$('#ghBrowse').onclick = async () => {
+  try {
+    const files = await busy('Loading repository files\u2026', () => call('github.listRepoFiles'));
+    if (!files.length) return toast('Repository is empty');
+    sheet(files.slice(0, 200).map(f => ({
+      label: f.path, icon: 'file',
+      fn: () => {
+        if (!project) return toast('Open or import a project first');
+        busy('Pulling ' + f.path + '\u2026', () => call('github.pull', { project, path: f.path }))
+          .then(() => refreshTree()).then(() => toast('Pulled ' + f.path)).catch(fail);
+      }
+    })));
+  } catch (e) { fail(e); }
+};
 $('#ghPullAll').onclick = async () => {
   if (!project) return toast('Open a project first');
   if (!await modal({ title: 'Pull all files?', text: 'Overwrites local files with the repository\u2019s versions.', ok: 'Pull' })) return;
-  try { const n = await busy('Pulling…', () => call('github.pullAll', { project })); await refreshTree(); toast('Pulled ' + n + ' file(s)'); } catch (e) { fail(e); }
+  try { const n = await busy('Pulling\u2026', () => call('github.pullAll', { project })); await refreshTree(); toast('Pulled ' + n + ' file(s)'); } catch (e) { fail(e); }
 };
 $('#ghPushAll').onclick = async () => {
   if (!project) return toast('Open a project first');
   const msg = await modal({ title: 'Commit message', value: 'Update ' + project + ' via SARI IDE' }); if (msg === null) return;
-  try { await saveAll(); const n = await busy('Pushing…', () => call('github.pushAll', { project, message: msg })); toast('Pushed ' + n + ' file(s)'); } catch (e) { fail(e); }
+  try { await saveAll(); const n = await busy('Pushing\u2026', () => call('github.pushAll', { project, message: msg })); toast('Pushed ' + n + ' file(s)'); } catch (e) { fail(e); }
 };
 $('#ghBranches').onclick = async () => {
   try {
-    const list = await busy('Loading branches…', () => call('github.listBranches'));
-    sheet([...list.map(b => ({ label: b, fn: () => toast('Current branch stays "' + b + '" once selected via Connect') })),
-      { label: '+ Create branch…', fn: createBranch }]);
+    const list = await busy('Loading branches\u2026', () => call('github.listBranches'));
+    sheet([...list.map(b => ({ label: b, icon: 'branch', fn: () => toast('Branch "' + b + '" \u2014 reconnect with this branch name to switch to it') })),
+      { label: '+ Create branch\u2026', icon: 'plus', fn: createBranch }]);
   } catch (e) { fail(e); }
 };
 async function createBranch() {
   const name = await modal({ title: 'New branch name', value: '' }); if (!name) return;
-  try { await busy('Creating…', () => call('github.createBranch', { name: name.trim(), from: 'main' })); toast('Branch "' + name + '" created'); } catch (e) { fail(e); }
+  try { await busy('Creating\u2026', () => call('github.createBranch', { name: name.trim(), from: 'main' })); toast('Branch "' + name + '" created'); } catch (e) { fail(e); }
 }
 $('#ghTrigger').onclick = async () => {
+  if (!project) return toast('Open the project you want to build first');
+  if (!await modal({ title: 'Push & trigger build', text: 'Pushes "' + project + '" then dispatches android-build.yml.', ok: 'Go' })) return;
   try {
-    const run = await busy('Starting workflow…', () => call('github.triggerWorkflow', { workflowFile: 'android-build.yml', ref: '' }));
+    const n = await busy('Pushing\u2026', () => call('github.pushAll', { project, message: 'Update ' + project + ' via SARI IDE' }));
+    toast('Pushed ' + n + ' file(s)');
+    const run = await busy('Starting workflow\u2026', () => call('github.triggerWorkflow', { workflowFile: 'android-build.yml', ref: '' }));
     if (run && run.id) openRunDetail(run.id); else refreshGithubRuns();
   } catch (e) { fail(e); }
 };
@@ -571,7 +650,7 @@ async function refreshGithubRuns() {
     runs.slice(0, 10).forEach(r => {
       const item = el('div', 'run-item');
       const t = el('div', 't');
-      t.append(el('div', '', '#' + r.run_number + ' — ' + (r.display_title || r.name || 'build')));
+      t.append(el('div', '', '#' + r.run_number + ' \u2014 ' + (r.display_title || r.name || 'build')));
       t.append(el('div', 'muted', new Date(r.created_at).toLocaleString()));
       const badge = el('span', 'badge ' + badgeClass(r), badgeText(r));
       item.append(t, badge);
@@ -600,7 +679,7 @@ async function loadRunDetail() {
     const run = await call('github.getRun', { runId: currentRunId });
     const box = $('#rdStatus'); box.textContent = '';
     const t = el('div', 't');
-    t.append(el('div', '', 'Run #' + run.run_number), el('div', 'muted', run.status + (run.conclusion ? ' · ' + run.conclusion : '')));
+    t.append(el('div', '', 'Run #' + run.run_number), el('div', 'muted', run.status + (run.conclusion ? ' \u00b7 ' + run.conclusion : '')));
     box.append(t, el('span', 'badge ' + badgeClass(run), badgeText(run)));
     if (run.status === 'completed') {
       clearInterval(pollTimer);
@@ -620,16 +699,16 @@ async function loadRunDetail() {
         });
       }
     } else {
-      $('#rdLogs').textContent = 'Build is ' + run.status + ' — logs appear once it completes.';
+      $('#rdLogs').textContent = 'Build is ' + run.status + ' \u2014 logs appear once it completes.';
     }
   } catch (e) { fail(e); }
 }
 async function downloadArtifact(artifactId) {
   if (!project) return toast('Open a project first');
   try {
-    const res = await busy('Downloading artifact…', () => call('github.downloadArtifact', { project, artifactId }));
+    const res = await busy('Downloading artifact\u2026', () => call('github.downloadArtifact', { project, artifactId }));
     if (res.apks && res.apks.length) {
-      sheet(res.apks.map(p => ({ label: 'Install ' + p.split('/').pop(), fn: () => call('github.installApk', { path: p }).catch(fail) })));
+      sheet(res.apks.map(p => ({ label: 'Install ' + p.split('/').pop(), icon: 'build', fn: () => call('github.installApk', { path: p }).catch(fail) })));
     } else {
       toast('Downloaded to ' + res.extractedTo);
     }
@@ -641,8 +720,9 @@ async function downloadArtifact(artifactId) {
 // ============================================================
 async function openSettings() {
   showScreen('#settingsScreen');
-  const avail = await call('termux.available').catch(() => false);
-  $('#stTermuxWarn').hidden = !!avail;
+  const diag = await call('termux.diagnostics').catch(() => ({ installed: false, permission: false }));
+  $('#stTermuxWarn').hidden = !!diag.installed;
+  $('#stPermWarn').hidden = !diag.installed || !!diag.permission;
   loadLanguages();
 }
 $('#stBack').onclick = closeScreens;
@@ -650,17 +730,16 @@ $('#stTheme').onclick = () => { const d = document.documentElement, n = d.datase
 $('#stFontUp').onclick = () => { fontSize = Math.min(28, fontSize + 1); localStorage.setItem('fontSize', fontSize); applyFont(); };
 $('#stFontDown').onclick = () => { fontSize = Math.max(10, fontSize - 1); localStorage.setItem('fontSize', fontSize); applyFont(); };
 async function loadLanguages() {
-  const box = $('#langList'); box.textContent = 'Checking installed languages…';
+  const box = $('#langList'); box.textContent = 'Checking installed languages\u2026';
   try {
     const list = await call('languages.list');
     box.textContent = '';
     list.forEach(l => {
       const row = el('div', 'lang-item');
-      row.append(el('div', 'ico', l.icon));
       const t = el('div', 't'); t.append(el('div', '', l.label));
       row.appendChild(t);
       if (l.installed) {
-        t.append(el('div', 'muted', '✓ Installed'));
+        t.append(el('div', 'muted', 'Installed (verified)'));
         if (l.hasPackages) { const pk = el('button', '', 'Packages'); pk.onclick = () => installPackages(l.id, l.label); row.appendChild(pk); }
       } else if (l.installable) {
         const b = el('button', 'primary', 'Install');
@@ -674,11 +753,11 @@ async function loadLanguages() {
   } catch (e) { box.textContent = ''; fail(e); }
 }
 async function installLanguage(id, label, btn) {
-  btn.disabled = true; btn.textContent = 'Installing…';
+  btn.disabled = true; btn.textContent = 'Installing\u2026';
   try {
     const r = await call('languages.install', { id });
-    toast((r.ok ? label + ' installed' : 'Install may have failed — check output') );
-    if (!r.ok) showLogSheet(r);
+    if (r.ok) { toast(label + ' installed and verified'); }
+    else { toast('Install did not verify \u2014 opening output'); openConsole(); consoleWrite('$ pkg install ' + id); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr); }
     await loadLanguages();
   } catch (e) { fail(e); btn.disabled = false; btn.textContent = 'Install'; }
 }
@@ -686,20 +765,16 @@ async function installPackages(id, label) {
   const pkgs = await modal({ title: label + ' packages', text: 'Space-separated, e.g. numpy requests', value: '' });
   if (!pkgs || !pkgs.trim()) return;
   try {
-    const r = await busy('Installing packages…', () => call('languages.installPackages', { id, packages: pkgs.trim() }));
-    toast(r.ok ? 'Packages installed' : 'Install may have failed'); if (!r.ok) showLogSheet(r);
+    const r = await busy('Installing packages\u2026', () => call('languages.installPackages', { id, packages: pkgs.trim() }));
+    if (r.ok) toast('Packages installed');
+    else { openConsole(); consoleWrite('$ install packages: ' + pkgs); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr); }
   } catch (e) { fail(e); }
-}
-function showLogSheet(r) {
-  const text = (r.stdout || '') + '\n' + (r.stderr || '');
-  openTerminalWithOutput(text || 'No output');
 }
 
 // ============================================================
-// Terminal
+// Termux Terminal (real shell — separate from Console Output)
 // ============================================================
 function openTerminal() { showScreen('#termuxScreen'); }
-function openTerminalWithOutput(text) { openTerminal(); appendTerm(text); }
 $('#tmBack').onclick = closeScreens;
 $('#tmClear').onclick = () => { $('#tmOutput').textContent = ''; };
 function appendTerm(text) {
@@ -714,23 +789,13 @@ async function termRun() {
   $('#tmInput').value = '';
   try {
     const r = await call('termux.run', { project, path: '', command: cmd });
-    if (r.stdout) appendTerm(r.stdout.trimEnd());
-    if (r.stderr) appendTerm(r.stderr.trimEnd());
+    if (r.stdout) appendTerm(r.stdout.replace(/\s+$/, ''));
+    if (r.stderr) appendTerm(r.stderr.replace(/\s+$/, ''));
     appendTerm('Process finished with exit code ' + r.exitCode);
   } catch (e) { appendTerm('error: ' + e.message); }
 }
 $('#tmRun').onclick = termRun;
 $('#tmInput').addEventListener('keydown', e => { if (e.key === 'Enter') termRun(); });
-async function runInTerminal(command, label) {
-  openTerminal();
-  appendTerm('$ ' + command);
-  try {
-    const r = await busy(label || 'Running…', () => call('termux.run', { project, path: '', command }));
-    if (r.stdout) appendTerm(r.stdout.trimEnd());
-    if (r.stderr) appendTerm(r.stderr.trimEnd());
-    appendTerm('Process finished with exit code ' + r.exitCode);
-  } catch (e) { appendTerm('error: ' + e.message); }
-}
 
 // ---------- back button ----------
 window.sariBack = () => {
@@ -738,6 +803,7 @@ window.sariBack = () => {
   if (!$('#sheetWrap').hidden) { closeSheet(); return true; }
   if (!$('#findBar').hidden) { $('#fbClose').click(); return true; }
   if (!$('#preview').hidden) { $('#btnClosePreview').click(); return true; }
+  if (!$('#consolePanel').hidden) { closeConsole(); return true; }
   if (!$('#runDetail').hidden) { $('#rdBack').click(); return true; }
   if (!$('#githubScreen').hidden) { closeScreens(); return true; }
   if (!$('#settingsScreen').hidden) { closeScreens(); return true; }
@@ -749,4 +815,5 @@ window.sariBack = () => {
   return false;
 };
 
+applyIcons();
 showHome();

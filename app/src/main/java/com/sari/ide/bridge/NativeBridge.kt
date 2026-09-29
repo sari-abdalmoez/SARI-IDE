@@ -86,10 +86,14 @@ class NativeBridge(
 
         // ---- Termux execution ----
         "termux.available" -> TermuxBridge.isInstalled(context)
+        "termux.diagnostics" -> JSONObject()
+            .put("installed", TermuxBridge.isInstalled(context))
+            .put("permission", TermuxBridge.hasPermission(context))
         "termux.run" -> {
             val dir = projects.dir(a.getString("project"))
             val cwd = if (a.optString("path", "").isEmpty()) dir.absolutePath else File(dir, a.getString("path")).absolutePath
-            TermuxBridge.run(context, a.getString("command"), cwd, a.optLong("timeoutMs", 120_000))
+            val stdin = if (a.has("stdin") && !a.isNull("stdin")) a.getString("stdin") else null
+            TermuxBridge.run(context, a.getString("command"), cwd, a.optLong("timeoutMs", 120_000), stdin)
         }
 
         // ---- languages (installed/run via Termux) ----
@@ -106,9 +110,20 @@ class NativeBridge(
 
         // ---- GitHub repository content ----
         "github.listRepoFiles" -> github.listRepoFiles()
+        "github.importRepo" -> {
+            val name = a.getString("project")
+            projects.create(name, "empty")
+            val fileManager = FileManager(projects.dir(name))
+            val files = github.listRepoFiles()
+            var count = 0
+            for (i in 0 until files.length()) {
+                val path = files.getJSONObject(i).getString("path")
+                try { fileManager.writeBytes(path, github.pullFileBytes(path)); count++ } catch (e: Exception) { /* skip unreadable entries */ }
+            }
+            JSONObject().put("project", name).put("imported", count)
+        }
         "github.pull" -> {
-            val content = github.pullFile(a.getString("path"))
-            fm(a).write(a.getString("path"), content)
+            fm(a).writeBytes(a.getString("path"), github.pullFileBytes(a.getString("path")))
             true
         }
         "github.pullAll" -> {
@@ -116,17 +131,17 @@ class NativeBridge(
             var count = 0
             for (i in 0 until files.length()) {
                 val path = files.getJSONObject(i).getString("path")
-                try { fm(a).write(path, github.pullFile(path)); count++ } catch (e: Exception) { /* skip unreadable entries */ }
+                try { fm(a).writeBytes(path, github.pullFileBytes(path)); count++ } catch (e: Exception) { /* skip unreadable entries */ }
             }
             count
         }
-        "github.push" -> github.pushFile(a.getString("path"), fm(a).read(a.getString("path")), a.optString("message", "Update ${a.getString("path")} via SARI IDE"))
+        "github.push" -> github.pushFile(a.getString("path"), fm(a).readBytes(a.getString("path")), a.optString("message", "Update ${a.getString("path")} via SARI IDE"))
         "github.pushAll" -> {
             val fileManager = fm(a)
             val message = a.optString("message", "Update project via SARI IDE")
             var count = 0
             for (path in fileManager.allFiles()) {
-                try { github.pushFile(path, fileManager.read(path), message); count++ } catch (e: Exception) { /* skip binary/unreadable */ }
+                try { github.pushFile(path, fileManager.readBytes(path), message); count++ } catch (e: Exception) { /* skip unreadable */ }
             }
             count
         }

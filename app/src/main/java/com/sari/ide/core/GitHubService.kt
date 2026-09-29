@@ -70,9 +70,17 @@ class GitHubService(private val store: SecureStore) {
 
     fun connect(username: String, token: String, repo: String, branch: String): JSONObject {
         require(username.isNotBlank() && token.isNotBlank() && repo.isNotBlank()) { "Username, token and repository are required" }
-        val cleanRepo = repo.trim().removePrefix("https://github.com/").removeSuffix(".git")
+        val cleanRepo = repo.trim().removePrefix("https://github.com/").removeSuffix(".git").trim('/')
+        require(cleanRepo.count { it == '/' } == 1) { "Repository must be in the form owner/repo" }
         store.saveGitHub(SecureStore.GitHubConfig(username.trim(), token.trim(), cleanRepo, branch.ifBlank { "main" }))
-        val info = req("GET", "$base/repos/$cleanRepo")
+        val info = try {
+            req("GET", "$base/repos/$cleanRepo")
+        } catch (e: GitHubApiException) {
+            store.clearGitHub()
+            if (e.status == 404) throw GitHubApiException("Repository \"$cleanRepo\" was not found, or this token cannot see it (private repos need the \"repo\" scope).", 404)
+            if (e.status == 401) throw GitHubApiException("GitHub rejected the token (invalid or expired).", 401)
+            throw e
+        }
         val defaultBranch = info.optString("default_branch", "main")
         if (branch.isBlank()) store.setBranch(defaultBranch)
         return status()
@@ -126,16 +134,24 @@ class GitHubService(private val store: SecureStore) {
         return String(Base64.decode(content.replace("\n", ""), Base64.DEFAULT), Charsets.UTF_8)
     }
 
+    /** Byte-exact fetch — use this (not [pullFile]) for anything that isn't guaranteed plain text, so binary assets round-trip intact. */
+    fun pullFileBytes(path: String): ByteArray {
+        val c = cfg()
+        val r = req("GET", "$base/repos/${c.repo}/contents/${encPath(path)}?ref=${c.branch}")
+        val content = r.optString("content", "")
+        return Base64.decode(content.replace("\n", ""), Base64.DEFAULT)
+    }
+
     private fun existingSha(path: String): String? = try {
         req("GET", "$base/repos/${cfg().repo}/contents/${encPath(path)}?ref=${cfg().branch}").optString("sha", null)
     } catch (e: GitHubApiException) { null }
 
-    fun pushFile(path: String, content: String, message: String): JSONObject {
+    fun pushFile(path: String, content: ByteArray, message: String): JSONObject {
         val c = cfg()
         val sha = existingSha(path)
         val body = JSONObject()
             .put("message", message)
-            .put("content", Base64.encodeToString(content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP))
+            .put("content", Base64.encodeToString(content, Base64.NO_WRAP))
             .put("branch", c.branch)
         if (sha != null) body.put("sha", sha)
         return req("PUT", "$base/repos/${c.repo}/contents/${encPath(path)}", body)
@@ -149,7 +165,28 @@ class GitHubService(private val store: SecureStore) {
 
     fun triggerWorkflow(workflowFile: String, ref: String): JSONObject {
         val c = cfg()
-        req("POST", "$base/repos/${c.repo}/actions/workflows/$workflowFile/dispatches", JSONObject().put("ref", ref.ifBlank { c.branch }))
+        val targetRef = ref.ifBlank { c.branch }
+
+        // A bare 404 from the dispatch endpoint is almost always one of these two — check them first so the
+        // user gets an actionable reason instead of "404 Not Found".
+        try {
+            req("GET", "$base/repos/${c.repo}/branches/$targetRef")
+        } catch (e: GitHubApiException) {
+            if (e.status == 404) throw GitHubApiException("Branch \"$targetRef\" does not exist yet in ${c.repo}. Push your project to that branch first (GitHub \u2192 Push all).", 404)
+            throw e
+        }
+        try {
+            req("GET", "$base/repos/${c.repo}/contents/.github/workflows/$workflowFile?ref=$targetRef")
+        } catch (e: GitHubApiException) {
+            if (e.status == 404) throw GitHubApiException(
+                "Workflow file .github/workflows/$workflowFile was not found on branch \"$targetRef\". Push your project first \u2014 it includes this workflow file. " +
+                    "Note: GitHub only lets you dispatch a workflow that already exists on the repository's default branch, even when targeting another branch.",
+                404
+            )
+            throw e
+        }
+
+        req("POST", "$base/repos/${c.repo}/actions/workflows/$workflowFile/dispatches", JSONObject().put("ref", targetRef))
         Thread.sleep(1200)
         val runs = req("GET", "$base/repos/${c.repo}/actions/runs?per_page=5")
         val arr = runs.optJSONArray("workflow_runs") ?: JSONArray()

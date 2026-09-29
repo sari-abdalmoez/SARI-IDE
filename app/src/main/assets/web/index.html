@@ -11,9 +11,9 @@
 <section id="home">
   <header class="bar">
     <div class="brand">SARI <b>IDE</b></div>
-    <button id="btnGithubHome" class="ic" title="GitHub">🐙</button>
-    <button id="btnSettingsHome" class="ic" title="Settings">⚙️</button>
-    <button id="btnNewProject" class="primary">+ New project</button>
+    <button id="btnGithubHome" class="ic" data-icon="github" title="GitHub"></button>
+    <button id="btnSettingsHome" class="ic" data-icon="settings" title="Settings"></button>
+    <button id="btnNewProject" class="primary"><span data-icon="plus"></span> New project</button>
   </header>
   <div id="projects" class="list"></div>
   <p id="homeEmpty" class="muted center" hidden>No projects yet. Create your first one.</p>
@@ -21,31 +21,31 @@
 
 <section id="ide" hidden>
   <header class="bar">
-    <button id="btnDrawer" class="ic" title="Files">☰</button>
+    <button id="btnDrawer" class="ic" data-icon="menu" title="Files"></button>
     <div id="projName" class="pname"></div>
-    <button id="btnRun" class="ic run" title="Run">▶</button>
-    <button id="btnBuild" class="ic" title="Build">⚒</button>
-    <button id="btnSave" class="ic" title="Save (Ctrl+S)">💾</button>
-    <button id="btnEditorMenu" class="ic" title="Editor menu">⋮</button>
-    <button id="btnMore" class="ic" title="More">⋯</button>
+    <button id="btnRun" class="ic run" data-icon="play" title="Run"></button>
+    <button id="btnBuild" class="ic" data-icon="build" title="Build APK"></button>
+    <button id="btnSave" class="ic" data-icon="save" title="Save (Ctrl+S)"></button>
+    <button id="btnConsole" class="ic" data-icon="console" title="Console Output"></button>
+    <button id="btnEditorMenu" class="ic" data-icon="more-vert" title="Editor menu"></button>
   </header>
   <div class="ide-body">
     <aside id="drawer">
       <div class="drawer-head">
         <span>EXPLORER</span>
         <span>
-          <button id="btnNewFile" class="ic sm" title="New file">＋</button>
-          <button id="btnNewDir" class="ic sm" title="New folder">📁</button>
-          <button id="btnImportFile" class="ic sm" title="Import file">⬆️</button>
-          <button id="btnImportFolder" class="ic sm" title="Import folder">📥</button>
-          <button id="btnFind" class="ic sm" title="Find file (Ctrl+P)">🔍</button>
-          <button id="btnRefresh" class="ic sm" title="Refresh">⟳</button>
+          <button id="btnNewFile" class="ic sm" data-icon="file-plus" title="New file"></button>
+          <button id="btnNewDir" class="ic sm" data-icon="folder-plus" title="New folder"></button>
+          <button id="btnImportFile" class="ic sm" data-icon="upload" title="Import file"></button>
+          <button id="btnImportFolder" class="ic sm" data-icon="download" title="Import folder"></button>
+          <button id="btnFind" class="ic sm" data-icon="search" title="Find file (Ctrl+P)"></button>
+          <button id="btnRefresh" class="ic sm" data-icon="refresh" title="Refresh"></button>
         </span>
       </div>
       <div id="tree"></div>
       <div class="drawer-foot">
-        <button id="btnGithubDrawer" class="ic sm" title="GitHub">🐙 GitHub</button>
-        <button id="btnSettingsDrawer" class="ic sm" title="Settings">⚙️ Settings</button>
+        <button id="btnGithubDrawer" data-icon="github">GitHub</button>
+        <button id="btnSettingsDrawer" data-icon="settings">Settings</button>
       </div>
     </aside>
     <main id="main">
@@ -58,19 +58,34 @@
       <div id="findBar" hidden>
         <input id="fbFind" placeholder="Find">
         <input id="fbReplace" placeholder="Replace" hidden>
-        <button id="fbPrev" class="ic sm">↑</button>
-        <button id="fbNext" class="ic sm">↓</button>
-        <button id="fbReplaceOne" class="ic sm" hidden>1</button>
-        <button id="fbReplaceAll" class="ic sm" hidden>All</button>
+        <button id="fbPrev" class="ic sm" data-icon="back" title="Previous"></button>
+        <button id="fbNext" class="ic sm" data-icon="back" style="transform:scaleX(-1)" title="Next"></button>
+        <button id="fbReplaceOne" class="ic sm" hidden title="Replace">1</button>
+        <button id="fbReplaceAll" class="ic sm" hidden title="Replace all">All</button>
         <span id="fbCount" class="muted"></span>
-        <button id="fbClose" class="ic sm">✕</button>
+        <button id="fbClose" class="ic sm" data-icon="close"></button>
+      </div>
+      <div id="consolePanel" hidden>
+        <div class="console-head">
+          <span data-icon="console" class="sm-icon"></span><span class="ctitle">Console Output</span>
+          <span id="consoleStatus" class="badge run" hidden>running</span>
+          <span class="spacer"></span>
+          <button id="cCopy" class="ic sm" data-icon="copy" title="Copy output"></button>
+          <button id="cClear" class="ic sm" data-icon="trash" title="Clear"></button>
+          <button id="cClose" class="ic sm" data-icon="close" title="Close"></button>
+        </div>
+        <pre id="consoleOutput" class="logbox consoleBox"></pre>
+        <div id="consoleStdinRow">
+          <input id="consoleStdin" placeholder="stdin for next run (optional — piped in up front, see Help)">
+          <button id="consoleRerun" class="ic sm" data-icon="play" title="Run again"></button>
+        </div>
       </div>
       <div id="keys">
         <button data-ins="    ">Tab</button><button data-ins="{">{</button><button data-ins="}">}</button>
         <button data-ins="(">(</button><button data-ins=")">)</button><button data-ins="[">[</button><button data-ins="]">]</button>
         <button data-ins=";">;</button><button data-ins="&quot;">"</button><button data-ins="=">=</button>
         <button data-ins="&lt;">&lt;</button><button data-ins="&gt;">&gt;</button>
-        <button id="kUndo">↶</button><button id="kRedo">↷</button>
+        <button id="kUndo">&#8630;</button><button id="kRedo">&#8631;</button>
       </div>
       <div id="status"><span id="stFile"></span><span id="stPos"></span></div>
     </main>
@@ -79,12 +94,12 @@
 </section>
 
 <div id="preview" hidden>
-  <div class="bar"><div class="pname">Preview</div><button id="btnClosePreview" class="ic">✕</button></div>
+  <div class="bar"><div class="pname">Preview</div><button id="btnClosePreview" class="ic" data-icon="close"></button></div>
   <iframe id="frame" sandbox="allow-scripts"></iframe>
 </div>
 
 <section id="githubScreen" hidden>
-  <header class="bar"><button id="ghBack" class="ic">←</button><div class="pname">GitHub</div><button id="ghRefresh" class="ic" title="Refresh">⟳</button></header>
+  <header class="bar"><button id="ghBack" class="ic" data-icon="back"></button><div class="pname">GitHub</div><button id="ghRefresh" class="ic" data-icon="refresh" title="Refresh"></button></header>
   <div class="screen-body">
     <div id="ghDisconnected" class="formCard">
       <h3>Connect a repository</h3>
@@ -98,23 +113,28 @@
     <div id="ghConnected" class="list" hidden>
       <div class="card-item">
         <div class="t"><div id="ghStatusLine">Connected</div><div id="ghRepoLine" class="muted"></div></div>
-        <button id="ghDisconnect" class="ic">⏏</button>
+        <button id="ghDisconnect" class="ic" data-icon="eject" title="Disconnect"></button>
       </div>
-      <div class="sectionTitle">Repository (project: <span id="ghProjName"></span>)</div>
+      <div class="sectionTitle">Repository</div>
       <div class="rowButtons">
-        <button id="ghPullAll">⬇ Pull all</button>
-        <button id="ghPushAll">⬆ Push all</button>
-        <button id="ghBranches">🌿 Branches</button>
+        <button id="ghImportRepo" data-icon="download">Import as new project</button>
+        <button id="ghBrowse" data-icon="folder-open">Browse files</button>
+      </div>
+      <div class="sectionTitle">Current project: <span id="ghProjName"></span></div>
+      <div class="rowButtons">
+        <button id="ghPullAll" data-icon="download">Pull all</button>
+        <button id="ghPushAll" data-icon="upload">Push all</button>
+        <button id="ghBranches" data-icon="branch">Branches</button>
       </div>
       <div class="sectionTitle">Build (GitHub Actions)</div>
-      <div class="rowButtons"><button id="ghTrigger" class="primary">▶ Trigger build</button></div>
+      <div class="rowButtons"><button id="ghTrigger" class="primary" data-icon="build">Push &amp; trigger build</button></div>
       <div id="ghRuns"></div>
     </div>
   </div>
 </section>
 
 <section id="runDetail" hidden>
-  <header class="bar"><button id="rdBack" class="ic">←</button><div class="pname">Build</div><button id="rdRefresh" class="ic">⟳</button></header>
+  <header class="bar"><button id="rdBack" class="ic" data-icon="back"></button><div class="pname">Build</div><button id="rdRefresh" class="ic" data-icon="refresh"></button></header>
   <div class="screen-body">
     <div id="rdStatus" class="card-item"></div>
     <div id="rdArtifacts"></div>
@@ -124,24 +144,26 @@
 </section>
 
 <section id="settingsScreen" hidden>
-  <header class="bar"><button id="stBack" class="ic">←</button><div class="pname">Settings</div></header>
+  <header class="bar"><button id="stBack" class="ic" data-icon="back"></button><div class="pname">Settings</div></header>
   <div class="screen-body">
     <div class="sectionTitle">Appearance</div>
     <div class="rowButtons">
       <button id="stTheme">Toggle light / dark</button>
       <button id="stFontUp">Font +</button>
-      <button id="stFontDown">Font −</button>
+      <button id="stFontDown">Font -</button>
     </div>
     <div class="sectionTitle">Programming languages (via Termux)</div>
     <p id="stTermuxWarn" class="muted small" hidden>Termux was not detected. Install Termux (F-Droid / GitHub build) to install and run languages.</p>
+    <p id="stPermWarn" class="muted small" hidden>SARI IDE does not have Termux's RUN_COMMAND permission yet — it will be requested the first time you install or run something.</p>
     <div id="langList" class="list"></div>
   </div>
 </section>
 
 <section id="termuxScreen" hidden>
-  <header class="bar"><button id="tmBack" class="ic">←</button><div class="pname">Terminal</div><button id="tmClear" class="ic">🧹</button></header>
+  <header class="bar"><button id="tmBack" class="ic" data-icon="back"></button><div class="pname">Termux Terminal</div><button id="tmClear" class="ic" data-icon="trash"></button></header>
+  <p class="muted small termuxNote">This is a real shell inside your Termux app — separate from the Console Output shown when you press Run.</p>
   <pre id="tmOutput" class="logbox termOut"></pre>
-  <div id="tmInputRow"><input id="tmInput" placeholder="command" autocapitalize="off" autocomplete="off" dir="ltr"><button id="tmRun" class="primary">Run</button></div>
+  <div id="tmInputRow"><input id="tmInput" placeholder="command" autocapitalize="off" autocomplete="off" dir="ltr"><button id="tmRun" class="ic" data-icon="send"></button></div>
 </section>
 
 <div id="modal" hidden><div class="card">
@@ -155,6 +177,7 @@
 <div id="toast" hidden></div>
 <div id="busy" hidden><div class="spin"></div><div id="busyText"></div></div>
 
+<script src="icons.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -45,7 +45,8 @@ class NativeBridge(
 
     private fun fm(a: JSONObject) = FileManager(projects.dir(a.getString("project")))
 
-    private suspend fun dispatch(op: String, a: JSONObject): Any = when (op) {
+    private suspend fun dispatch(op: String, a: JSONObject): Any {
+        return when (op) {
         // ---- projects ----
         "listProjects" -> projects.list()
         "createProject" -> projects.create(a.getString("name"), a.getString("template"))
@@ -148,5 +149,6 @@ class NativeBridge(
         "github.installApk" -> { ApkInstaller.install(context, File(a.getString("path"))); true }
 
         else -> throw IllegalArgumentException("Unknown operation: $op")
+        }
     }
 }

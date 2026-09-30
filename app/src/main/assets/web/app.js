@@ -502,14 +502,19 @@ async function runFile(filePath, lang) {
  * constructed from the relative filePath within the current project.
  */
 function buildRunCommand(filePath, lang) {
-  // Termux sees the project at ~/storage/shared/SARIProjects/<project>/
-  const termuxProjectBase = '~/storage/shared/SARIProjects/' + project;
+  // Use the real shared-storage path directly.
+  // Do NOT use ~/storage/shared/... because ~ does not expand inside quotes.
+  const termuxProjectBase = '/storage/emulated/0/SARIProjects/' + project;
   const termuxFile = termuxProjectBase + '/' + filePath;
   const tmpBin = '/data/data/com.termux/files/usr/tmp/sari_run_' + Date.now();
+
   switch (lang) {
-    case 'python': return "python3 '" + termuxFile + "'";
-    case 'javascript': return "node '" + termuxFile + "'";
-    case 'bash': return "bash '" + termuxFile + "'";
+    case 'python':
+      return "python3 '" + termuxFile + "'";
+    case 'javascript':
+      return "node '" + termuxFile + "'";
+    case 'bash':
+      return "bash '" + termuxFile + "'";
     case 'c':
       return "clang '" + termuxFile + "' -O2 -o '" + tmpBin + "' 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
     case 'cpp':
@@ -523,7 +528,8 @@ function buildRunCommand(filePath, lang) {
       const tmpJar = '/data/data/com.termux/files/usr/tmp/sari_kotlin_' + Date.now() + '.jar';
       return "kotlinc '" + termuxFile + "' -include-runtime -d '" + tmpJar + "' 2>&1 && echo '-- compile OK --' && java -jar '" + tmpJar + "'";
     }
-    default: return null;
+    default:
+      return null;
   }
 }
 

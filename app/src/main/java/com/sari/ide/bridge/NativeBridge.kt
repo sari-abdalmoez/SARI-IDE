@@ -189,7 +189,15 @@ class NativeBridge(
             val stdin = if (a.has("stdin") && !a.isNull("stdin")) a.getString("stdin") else null
             val rawCmd = a.getString("command")
             // Also translate any absolute project paths that appear inside the command itself
-            val translatedCmd = rawCmd.replace(projectDir.absolutePath, toTermuxPath(projectDir.absolutePath))
+            val translatedCmd = rawCmd
+                .replace(
+                    projectDir.absolutePath,
+                    toTermuxPath(projectDir.absolutePath)
+                )
+                .replace(
+                    "~/storage/shared/SARIProjects/${projectDir.name}",
+                    toTermuxPath(projectDir.absolutePath)
+                )
             TermuxBridge.run(context, translatedCmd, termuxCwd, a.optLong("timeoutMs", 120_000), stdin)
         }
 

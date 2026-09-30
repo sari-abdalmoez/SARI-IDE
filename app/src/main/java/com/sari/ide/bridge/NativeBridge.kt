@@ -4,10 +4,12 @@ import android.content.Context
 import com.sari.ide.core.ApkInstaller
 import com.sari.ide.core.ArtifactManager
 import com.sari.ide.core.DocumentImporter
+import com.sari.ide.core.ExecutionManager
 import com.sari.ide.core.FileManager
 import com.sari.ide.core.GitHubService
 import com.sari.ide.core.LanguageManager
 import com.sari.ide.core.ProjectManager
+import com.sari.ide.core.PathGuard
 import com.sari.ide.core.SecureStore
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,6 +30,7 @@ class NativeBridge(
     private val projects = ProjectManager(projectsRoot)
     private val secureStore = SecureStore(context)
     private val github = GitHubService(secureStore)
+    private val execution = ExecutionManager(context, projects)
 
     suspend fun handle(raw: String): String {
         var id: Any = JSONObject.NULL
@@ -65,17 +68,19 @@ class NativeBridge(
         "copy" -> fm(a).copy(a.getString("path"), a.optString("destDir", ""))
         "move" -> fm(a).move(a.getString("path"), a.optString("destDir", ""))
         "search" -> fm(a).search(a.getString("query"))
+        "file.sha256" -> fm(a).sha256(a.getString("path"))
+        "native.status" -> JSONObject().put("rust", NativeCore.isAvailable())
 
         // ---- import from device storage ----
         "importFiles" -> {
             val dir = projects.dir(a.getString("project"))
-            val target = if (a.optString("dir", "").isEmpty()) dir else File(dir, a.getString("dir"))
+            val target = if (a.optString("dir", "").isEmpty()) dir else PathGuard.resolve(dir, a.getString("dir"))
             val uris = picker.pickFiles()
             if (uris.isEmpty()) JSONArray() else JSONArray(DocumentImporter.importFiles(context, uris, target))
         }
         "importFolder" -> {
             val dir = projects.dir(a.getString("project"))
-            val target = if (a.optString("dir", "").isEmpty()) dir else File(dir, a.getString("dir"))
+            val target = if (a.optString("dir", "").isEmpty()) dir else PathGuard.resolve(dir, a.getString("dir"))
             val uri = picker.pickFolder() ?: return JSONObject.NULL
             DocumentImporter.importFolder(context, uri, target)
         }
@@ -84,14 +89,35 @@ class NativeBridge(
         "storage.status" -> JSONObject().put("shared", system.hasSharedStorageAccess())
         "storage.requestAccess" -> { system.openAllFilesAccessSettings(); true }
 
-        // ---- Termux execution ----
+        // ---- De Linux execution ----
+        "execution.status" -> execution.status()
+        "execution.start" -> execution.start(
+            a.getString("project"),
+            a.getString("path"),
+            a.getString("language"),
+            if (a.has("stdin") && !a.isNull("stdin")) a.getString("stdin") else null
+        )
+        "execution.poll" -> execution.poll(a.getString("sessionId"))
+        "execution.run" -> execution.run(
+            a.getString("project"),
+            a.getString("path"),
+            a.getString("language"),
+            if (a.has("stdin") && !a.isNull("stdin")) a.getString("stdin") else null
+        )
+        "execution.stop" -> execution.stop(a.getString("sessionId"))
+
+        // ---- Termux execution (advanced/optional only) ----
         "termux.available" -> TermuxBridge.isInstalled(context)
         "termux.diagnostics" -> JSONObject()
             .put("installed", TermuxBridge.isInstalled(context))
             .put("permission", TermuxBridge.hasPermission(context))
         "termux.run" -> {
             val dir = projects.dir(a.getString("project"))
-            val cwd = if (a.optString("path", "").isEmpty()) dir.absolutePath else File(dir, a.getString("path")).absolutePath
+            val cwd = if (a.optString("path", "").isEmpty()) {
+                dir.canonicalPath
+            } else {
+                PathGuard.resolve(dir, a.getString("path")).canonicalPath
+            }
             val stdin = if (a.has("stdin") && !a.isNull("stdin")) a.getString("stdin") else null
             TermuxBridge.run(context, a.getString("command"), cwd, a.optLong("timeoutMs", 120_000), stdin)
         }

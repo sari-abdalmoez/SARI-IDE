@@ -1,5 +1,6 @@
 package com.sari.ide.core
 
+import com.sari.ide.bridge.NativeCore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -137,6 +138,25 @@ class FileManager(projectDir: File) {
             if (f.isFile) out.add(rel(f))
         }
         return out
+    }
+
+    fun sha256(path: String): String {
+        val f = PathGuard.resolve(root, path)
+        require(f.isFile) { "Not a file" }
+        return NativeCore.sha256(f) ?: sha256Kotlin(f)
+    }
+
+    private fun sha256Kotlin(f: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        f.inputStream().buffered(1024 * 1024).use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n <= 0) break
+                digest.update(buffer, 0, n)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     fun search(query: String): JSONArray {

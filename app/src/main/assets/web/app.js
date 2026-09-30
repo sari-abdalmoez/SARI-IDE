@@ -420,7 +420,7 @@ $('#btnEditorMenu').onclick = () => sheet([
 // ============================================================
 // Console Output (per-run output; NOT the Termux Terminal)
 // ============================================================
-let lastRunCommand = null, consoleBusy = false;
+let lastRunSpec = null, consoleBusy = false, activeSessionId = null;
 function openConsole() { $('#consolePanel').hidden = false; }
 function closeConsole() { $('#consolePanel').hidden = true; }
 $('#btnConsole').onclick = () => { $('#consolePanel').hidden ? openConsole() : closeConsole(); };
@@ -434,7 +434,7 @@ function consoleWrite(text) {
   const box = $('#consoleOutput');
   const MAX = 200000;
   box.textContent += (box.textContent ? '\n' : '') + text;
-  if (box.textContent.length > MAX) box.textContent = '\u2026(truncated)\u2026\n' + box.textContent.slice(-MAX);
+  if (box.textContent.length > MAX) box.textContent = '…(truncated)…\n' + box.textContent.slice(-MAX);
   box.scrollTop = box.scrollHeight;
 }
 function setConsoleRunning(on) {
@@ -442,37 +442,54 @@ function setConsoleRunning(on) {
   const badge = $('#consoleStatus');
   badge.hidden = !on; badge.textContent = on ? 'running' : '';
   $('#btnConsole').classList.toggle('running', on);
+  $('#cStop').disabled = !on;
 }
-async function runCommandInConsole(command, label) {
+async function runExecution(path, language) {
   openConsole();
-  lastRunCommand = command;
-  consoleWrite('$ ' + command);
+  lastRunSpec = { path, language };
+  activeSessionId = null;
+  consoleWrite('▶ De Linux — ' + path);
   setConsoleRunning(true);
   try {
     const stdin = $('#consoleStdin').value || null;
-    const r = await call('termux.run', { project, path: '', command, stdin });
-    if (r.stdout) consoleWrite(r.stdout.replace(/\s+$/, ''));
-    if (r.stderr) consoleWrite(r.stderr.replace(/\s+$/, ''));
-    consoleWrite('Process finished with exit code ' + r.exitCode);
+    const r = await call('execution.start', { project, path, language, stdin });
+    if (r.status === 'UNSUPPORTED') {
+      consoleWrite('De Linux: ' + (r.stderr || 'Runtime is not installed.'));
+      return;
+    }
+    activeSessionId = r.sessionId;
+    while (activeSessionId === r.sessionId) {
+      const state = await call('execution.poll', { sessionId: r.sessionId });
+      if (state.status === 'RUNNING') {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        continue;
+      }
+      if (state.stdout) consoleWrite(state.stdout.replace(/\s+$/, ''));
+      if (state.stderr) consoleWrite(state.stderr.replace(/\s+$/, ''));
+      if (state.status !== 'UNKNOWN') consoleWrite('Process finished with exit code ' + state.exitCode);
+      break;
+    }
   } catch (e) {
     consoleWrite('error: ' + e.message);
   } finally {
+    if (activeSessionId) activeSessionId = null;
     setConsoleRunning(false);
   }
 }
-$('#consoleRerun').onclick = () => { if (lastRunCommand) runCommandInConsole(lastRunCommand); };
+$('#cStop').onclick = async () => {
+  if (!activeSessionId || !consoleBusy) return;
+  try {
+    await call('execution.stop', { sessionId: activeSessionId });
+    consoleWrite('Execution stopped.');
+  } catch (e) { consoleWrite('stop error: ' + e.message); }
+  finally { setConsoleRunning(false); }
+};
+$('#consoleRerun').onclick = () => {
+  if (lastRunSpec) runExecution(lastRunSpec.path, lastRunSpec.language);
+};
 
 // ---------- run / build ----------
 const ext = p => (p.split('.').pop() || '').toLowerCase();
-const RUN_CMD = {
-  python: f => `python3 '${f}'`,
-  javascript: f => `node '${f}'`,
-  bash: f => `bash '${f}'`,
-  c: f => `clang '${f}' -O2 -o /data/data/com.termux/files/usr/tmp/sari_run && echo '--- run ---' && /data/data/com.termux/files/usr/tmp/sari_run`,
-  cpp: f => `clang++ '${f}' -O2 -o /data/data/com.termux/files/usr/tmp/sari_run && echo '--- run ---' && /data/data/com.termux/files/usr/tmp/sari_run`,
-  java: f => `javac '${f}' -d /data/data/com.termux/files/usr/tmp/sari_java && echo '--- run ---' && java -cp /data/data/com.termux/files/usr/tmp/sari_java ${f.split('/').pop().replace(/\.java$/, '')}`,
-  kotlin: f => `kotlinc '${f}' -include-runtime -d /data/data/com.termux/files/usr/tmp/sari_run.jar && echo '--- run ---' && java -jar /data/data/com.termux/files/usr/tmp/sari_run.jar`,
-};
 async function run() {
   if (!project) return;
   try { await saveAll(); } catch (e) { return; }
@@ -483,10 +500,9 @@ async function run() {
   }
   if (htmlPath) return previewHtml(htmlPath);
   const lang = projectLang || (t ? guessLang(t.path) : '');
-  const builder = RUN_CMD[lang];
   const file = (t ? t.path : null);
-  if (!builder || !file) { openConsole(); consoleWrite('No runnable file recognized for this language yet.'); return; }
-  await runCommandInConsole(builder(file), 'Run: ' + file);
+  if (!lang || !file) { openConsole(); consoleWrite('No runnable file recognized for this language yet.'); return; }
+  await runExecution(file, lang);
 }
 function guessLang(path) {
   const e = ext(path);
@@ -721,8 +737,10 @@ async function downloadArtifact(artifactId) {
 async function openSettings() {
   showScreen('#settingsScreen');
   const diag = await call('termux.diagnostics').catch(() => ({ installed: false, permission: false }));
-  $('#stTermuxWarn').hidden = !!diag.installed;
+  $('#stTermuxWarn').hidden = false;
   $('#stPermWarn').hidden = !diag.installed || !!diag.permission;
+  const de = await call('execution.status').catch(() => ({ status: 'FAILED' }));
+  $('#deLinuxStatus').textContent = de.status + (de.availableRuntimes ? ' — ' + de.availableRuntimes : '');
   loadLanguages();
 }
 $('#stBack').onclick = closeScreens;
@@ -757,7 +775,7 @@ async function installLanguage(id, label, btn) {
   try {
     const r = await call('languages.install', { id });
     if (r.ok) { toast(label + ' installed and verified'); }
-    else { toast('Install did not verify \u2014 opening output'); openConsole(); consoleWrite('$ pkg install ' + id); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr); }
+    else { toast('Install did not verify \u2014 opening output'); openConsole(); consoleWrite('$ De Linux install ' + id); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr); }
     await loadLanguages();
   } catch (e) { fail(e); btn.disabled = false; btn.textContent = 'Install'; }
 }

@@ -11,8 +11,8 @@ android {
         applicationId = "com.sari.ide"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.3.0"
+        versionCode = 2
+        versionName = "0.3.1"
         ndk {
             // Only arm64 + x86_64 for modern devices; add armeabi-v7a if needed for older hardware
             abiFilters += listOf("arm64-v8a", "x86_64")

@@ -27,6 +27,19 @@ function busy(text, fn) {
   return Promise.resolve().then(fn).finally(() => { $('#busy').hidden = true; });
 }
 
+// ---------- streaming output from De Linux ----------
+// Each streaming message: {id, stream:true, line, isErr, sessionId}
+// We only display lines whose sessionId matches the current console session.
+let activeConsoleSessionId = -1;
+window._onNativeStream = function(msg) {
+  try {
+    const obj = typeof msg === 'string' ? JSON.parse(msg) : msg;
+    if (!obj.stream) return;
+    if (obj.sessionId !== undefined && obj.sessionId !== -1 && obj.sessionId !== activeConsoleSessionId) return;
+    consoleWrite(obj.line || '', !!obj.isErr);
+  } catch(e) { /* ignore malformed */ }
+};
+
 // ---------- state ----------
 let project = null, tabs = [], active = -1, clip = null, saveTimer = null;
 const expanded = new Set(['']);
@@ -36,6 +49,7 @@ let autoSave = localStorage.getItem('autoSave') !== 'off';
 let isAndroidProject = false;
 applyFont();
 document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';
+let deLinuxStatus = {};
 
 // ---------- UI helpers ----------
 let toastTimer;
@@ -127,6 +141,7 @@ async function openProject(name) {
   $('#home').hidden = true; $('#ide').hidden = false; $('#ide').classList.remove('open');
   $('#projName').textContent = name;
   renderTabs(); showActive();
+  call('delinux.status').then(s => { deLinuxStatus = s; }).catch(() => {});
   try {
     await refreshTree();
     detectAndroidProject();
@@ -137,8 +152,7 @@ async function openProject(name) {
 }
 function detectAndroidProject() {
   const root = cache.get('') || [];
-  isAndroidProject = root.some(it => it.dir && it.name === 'app') &&
-    root.some(it => !it.dir && /^settings\.gradle/.test(it.name));
+  isAndroidProject = root.some(it => it.dir && it.name === 'app') && root.some(it => !it.dir && /^settings\.gradle/.test(it.name));
   $('#btnBuild').style.display = isAndroidProject ? '' : 'none';
 }
 async function refreshTree() {
@@ -252,16 +266,10 @@ async function findFile() {
   } catch (e) { fail(e); }
 }
 async function importFiles() {
-  try {
-    const names = await busy('Importing\u2026', () => call('importFiles', { project, dir: '' }));
-    if (names && names.length) { await refreshTree(); toast('Imported ' + names.length + ' file(s)'); }
-  } catch (e) { fail(e); }
+  try { const names = await busy('Importing\u2026', () => call('importFiles', { project, dir: '' })); if (names && names.length) { await refreshTree(); toast('Imported ' + names.length + ' file(s)'); } } catch (e) { fail(e); }
 }
 async function importFolder() {
-  try {
-    const name = await busy('Importing folder\u2026', () => call('importFolder', { project, dir: '' }));
-    if (name) { await refreshTree(); toast('Imported "' + name + '"'); }
-  } catch (e) { fail(e); }
+  try { const name = await busy('Importing folder\u2026', () => call('importFolder', { project, dir: '' })); if (name) { await refreshTree(); toast('Imported "' + name + '"'); } } catch (e) { fail(e); }
 }
 
 // ---------- editor ----------
@@ -269,8 +277,7 @@ const ed = $('#ed'), gutter = $('#gutter');
 function updateGutter() {
   const n = ed.value.split('\n').length;
   let s = ''; for (let i = 1; i <= n; i++) s += i + '\n';
-  gutter.textContent = s;
-  gutter.scrollTop = ed.scrollTop;
+  gutter.textContent = s; gutter.scrollTop = ed.scrollTop;
 }
 function updateStatus() {
   const t = tabs[active];
@@ -280,10 +287,7 @@ function updateStatus() {
   $('#stPos').textContent = 'Ln ' + before.length + ', Col ' + (before[before.length - 1].length + 1);
 }
 function showActive() {
-  const t = tabs[active];
-  $('#empty').hidden = !!t;
-  ed.value = t ? t.content : '';
-  ed.disabled = !t;
+  const t = tabs[active]; $('#empty').hidden = !!t; ed.value = t ? t.content : ''; ed.disabled = !t;
   updateGutter(); updateStatus();
 }
 function renderTabs() {
@@ -294,24 +298,16 @@ function renderTabs() {
     if (t.dirty) d.append(el('span', 'dot', '\u25cf'));
     const x = el('span', 'x'); x.appendChild(icoEl('close'));
     x.onclick = e => { e.stopPropagation(); removeTab(i); };
-    d.append(x);
-    d.onclick = () => activate(i);
-    box.appendChild(d);
+    d.append(x); d.onclick = () => activate(i); box.appendChild(d);
   });
 }
 function activate(i) { active = i; renderTabs(); showActive(); }
 async function openFile(path) {
-  const i = tabs.findIndex(t => t.path === path);
-  if (i >= 0) return activate(i);
-  try {
-    const content = await call('readFile', { project, path });
-    tabs.push({ path, content, dirty: false });
-    activate(tabs.length - 1);
-  } catch (e) { fail(e); }
+  const i = tabs.findIndex(t => t.path === path); if (i >= 0) return activate(i);
+  try { const content = await call('readFile', { project, path }); tabs.push({ path, content, dirty: false }); activate(tabs.length - 1); } catch (e) { fail(e); }
 }
 async function removeTab(i, discard = false) {
-  const t = tabs[i];
-  if (t.dirty && !discard) await saveTab(t);
+  const t = tabs[i]; if (t.dirty && !discard) await saveTab(t);
   tabs.splice(i, 1);
   if (active >= tabs.length) active = tabs.length - 1;
   if (i < active) active--;
@@ -319,8 +315,7 @@ async function removeTab(i, discard = false) {
 }
 async function saveTab(t) {
   if (!t || !t.dirty) return;
-  try { await call('writeFile', { project, path: t.path, content: t.content }); t.dirty = false; renderTabs(); updateStatus(); }
-  catch (e) { fail(e); throw e; }
+  try { await call('writeFile', { project, path: t.path, content: t.content }); t.dirty = false; renderTabs(); updateStatus(); } catch (e) { fail(e); throw e; }
 }
 async function saveAll() { for (const t of tabs) await saveTab(t); }
 async function manualSave() { try { await saveAll(); toast('Saved'); } catch (e) { /* toast shown */ } }
@@ -347,10 +342,7 @@ ed.addEventListener('keydown', e => {
     insert('\n' + indent + ('{[(:'.includes(prev) ? '    ' : ''));
   }
 });
-document.querySelectorAll('#keys [data-ins]').forEach(b => {
-  b.addEventListener('pointerdown', e => e.preventDefault());
-  b.onclick = () => insert(b.dataset.ins);
-});
+document.querySelectorAll('#keys [data-ins]').forEach(b => { b.addEventListener('pointerdown', e => e.preventDefault()); b.onclick = () => insert(b.dataset.ins); });
 $('#kUndo').onclick = () => { ed.focus(); document.execCommand('undo'); };
 $('#kRedo').onclick = () => { ed.focus(); document.execCommand('redo'); };
 $('#kUndo').addEventListener('pointerdown', e => e.preventDefault());
@@ -362,12 +354,10 @@ function doSearch(showReplace) {
   if (!tabs[active]) return toast('Open a file first');
   $('#findBar').hidden = false;
   $('#fbReplace').hidden = !showReplace; $('#fbReplaceOne').hidden = !showReplace; $('#fbReplaceAll').hidden = !showReplace;
-  $('#fbFind').focus();
-  recomputeHits();
+  $('#fbFind').focus(); recomputeHits();
 }
 function recomputeHits() {
-  const q = $('#fbFind').value;
-  searchHits = [];
+  const q = $('#fbFind').value; searchHits = [];
   if (q) { const v = ed.value; let i = 0; while ((i = v.indexOf(q, i)) !== -1) { searchHits.push(i); i += q.length; } }
   searchIdx = searchHits.length ? 0 : -1;
   $('#fbCount').textContent = searchHits.length ? (searchIdx + 1) + '/' + searchHits.length : '0/0';
@@ -384,25 +374,16 @@ function jumpToHit() {
 $('#fbFind').addEventListener('input', recomputeHits);
 $('#fbNext').onclick = () => { if (searchHits.length) { searchIdx = (searchIdx + 1) % searchHits.length; $('#fbCount').textContent = (searchIdx + 1) + '/' + searchHits.length; jumpToHit(); } };
 $('#fbPrev').onclick = () => { if (searchHits.length) { searchIdx = (searchIdx - 1 + searchHits.length) % searchHits.length; $('#fbCount').textContent = (searchIdx + 1) + '/' + searchHits.length; jumpToHit(); } };
-$('#fbReplaceOne').onclick = () => {
-  if (searchIdx < 0) return;
-  const q = $('#fbFind').value, r = $('#fbReplace').value, pos = searchHits[searchIdx];
-  ed.setSelectionRange(pos, pos + q.length); insert(r); recomputeHits();
-};
-$('#fbReplaceAll').onclick = () => {
-  const q = $('#fbFind').value, r = $('#fbReplace').value; if (!q) return;
-  ed.value = ed.value.split(q).join(r); ed.dispatchEvent(new Event('input')); recomputeHits();
-  toast('Replaced all');
-};
+$('#fbReplaceOne').onclick = () => { if (searchIdx < 0) return; const q = $('#fbFind').value, r = $('#fbReplace').value, pos = searchHits[searchIdx]; ed.setSelectionRange(pos, pos + q.length); insert(r); recomputeHits(); };
+$('#fbReplaceAll').onclick = () => { const q = $('#fbFind').value, r = $('#fbReplace').value; if (!q) return; ed.value = ed.value.split(q).join(r); ed.dispatchEvent(new Event('input')); recomputeHits(); toast('Replaced all'); };
 $('#fbClose').onclick = () => { $('#findBar').hidden = true; searchHits = []; };
 async function goToLine() {
   const v = await modal({ title: 'Go to line', value: '' }); if (!v) return;
   const n = parseInt(v, 10); if (!n || !tabs[active]) return;
-  const lines = ed.value.split('\n');
-  let pos = 0; for (let i = 0; i < Math.min(n - 1, lines.length); i++) pos += lines[i].length + 1;
+  const lines = ed.value.split('\n'); let pos = 0;
+  for (let i = 0; i < Math.min(n - 1, lines.length); i++) pos += lines[i].length + 1;
   ed.focus(); ed.setSelectionRange(pos, pos);
-  ed.scrollTop = Math.max(0, (n - 4) * parseFloat(getComputedStyle(ed).lineHeight));
-  updateStatus();
+  ed.scrollTop = Math.max(0, (n - 4) * parseFloat(getComputedStyle(ed).lineHeight)); updateStatus();
 }
 $('#btnEditorMenu').onclick = () => sheet([
   { label: 'Search', icon: 'search', fn: () => doSearch(false) },
@@ -411,103 +392,141 @@ $('#btnEditorMenu').onclick = () => sheet([
   { label: 'Console Output', icon: 'console', fn: openConsole },
   { label: 'Termux Terminal', icon: 'terminal', fn: openTerminal },
   { label: 'GitHub', icon: 'github', fn: openGithubScreen },
-  { label: 'Settings', icon: 'settings', fn: openSettings },
+  { label: 'De Linux runtimes', icon: 'settings', fn: openSettings },
   { label: 'Auto-save: ' + (autoSave ? 'On' : 'Off'), icon: 'check', fn: () => { autoSave = !autoSave; localStorage.setItem('autoSave', autoSave ? 'on' : 'off'); toast('Auto-save ' + (autoSave ? 'on' : 'off')); } },
-  { label: 'Toggle light / dark theme', icon: 'settings', fn: () => { const d = document.documentElement, n = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = n; localStorage.setItem('theme', n); } },
+  { label: 'Toggle theme', icon: 'settings', fn: () => { const d = document.documentElement, n = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = n; localStorage.setItem('theme', n); } },
   { label: 'Close project', icon: 'back', fn: showHome },
 ]);
 
 // ============================================================
-// Console Output (per-run output; NOT the Termux Terminal)
+// Console Output — session-aware, NO cross-run contamination
 // ============================================================
-let lastRunSpec = null, consoleBusy = false, activeSessionId = null;
+let consoleBusy = false;
+let lastRunLang = null, lastRunFile = null;
+// Each call to runFile increments this. Output callbacks check it matches before writing.
+let currentRunId = 0;
+const CONSOLE_MAX_CHARS = 200000;
 function openConsole() { $('#consolePanel').hidden = false; }
 function closeConsole() { $('#consolePanel').hidden = true; }
 $('#btnConsole').onclick = () => { $('#consolePanel').hidden ? openConsole() : closeConsole(); };
 $('#cClose').onclick = closeConsole;
 $('#cClear').onclick = () => { $('#consoleOutput').textContent = ''; };
-$('#cCopy').onclick = async () => {
-  try { await navigator.clipboard.writeText($('#consoleOutput').textContent); toast('Copied'); }
-  catch (e) { toast('Copy failed'); }
+$('#cCopy').onclick = async () => { try { await navigator.clipboard.writeText($('#consoleOutput').textContent); toast('Copied'); } catch (e) { toast('Copy failed'); } };
+$('#cStop').onclick = () => {
+  // Mark this runId as expired so no further output from it renders
+  activeConsoleSessionId = -1;
+  currentRunId++;
+  setConsoleRunning(false);
+  consoleWrite('\n[Stopped — command may still be running in Termux]', true);
 };
-function consoleWrite(text) {
+$('#consoleRerun').onclick = () => { if (lastRunFile && lastRunLang && project) runFile(lastRunFile, lastRunLang); };
+
+function consoleWrite(text, isErr = false) {
   const box = $('#consoleOutput');
-  const MAX = 200000;
-  box.textContent += (box.textContent ? '\n' : '') + text;
-  if (box.textContent.length > MAX) box.textContent = '…(truncated)…\n' + box.textContent.slice(-MAX);
+  const line = el('div', isErr ? 'cerr' : '');
+  line.textContent = text;
+  box.appendChild(line);
+  while (box.textContent.length > CONSOLE_MAX_CHARS) { if (!box.firstChild) break; box.removeChild(box.firstChild); }
   box.scrollTop = box.scrollHeight;
+}
+function consoleClear(label) {
+  // Reset session guard so no in-flight callbacks from a previous run can write here
+  activeConsoleSessionId = -1;
+  const box = $('#consoleOutput'); box.textContent = '';
+  if (label) { const h = el('div', 'chead', label); box.appendChild(h); }
 }
 function setConsoleRunning(on) {
   consoleBusy = on;
-  const badge = $('#consoleStatus');
-  badge.hidden = !on; badge.textContent = on ? 'running' : '';
+  const badge = $('#consoleStatus'); badge.hidden = !on; badge.textContent = on ? 'running' : '';
   $('#btnConsole').classList.toggle('running', on);
-  $('#cStop').disabled = !on;
+  $('#cStop').hidden = !on; $('#consoleRerun').hidden = on;
 }
-async function runExecution(path, language) {
-  openConsole();
-  lastRunSpec = { path, language };
-  activeSessionId = null;
-  consoleWrite('▶ De Linux — ' + path);
-  setConsoleRunning(true);
-  try {
-    const stdin = $('#consoleStdin').value || null;
-    const r = await call('execution.start', { project, path, language, stdin });
-    if (r.status === 'UNSUPPORTED') {
-      consoleWrite('De Linux: ' + (r.stderr || 'Runtime is not installed.'));
-      return;
-    }
-    activeSessionId = r.sessionId;
-    while (activeSessionId === r.sessionId) {
-      const state = await call('execution.poll', { sessionId: r.sessionId });
-      if (state.status === 'RUNNING') {
-        await new Promise(resolve => setTimeout(resolve, 250));
-        continue;
-      }
-      if (state.stdout) consoleWrite(state.stdout.replace(/\s+$/, ''));
-      if (state.stderr) consoleWrite(state.stderr.replace(/\s+$/, ''));
-      if (state.status !== 'UNKNOWN') consoleWrite('Process finished with exit code ' + state.exitCode);
-      break;
-    }
-  } catch (e) {
-    consoleWrite('error: ' + e.message);
-  } finally {
-    if (activeSessionId) activeSessionId = null;
-    setConsoleRunning(false);
-  }
-}
-$('#cStop').onclick = async () => {
-  if (!activeSessionId || !consoleBusy) return;
-  try {
-    await call('execution.stop', { sessionId: activeSessionId });
-    consoleWrite('Execution stopped.');
-  } catch (e) { consoleWrite('stop error: ' + e.message); }
-  finally { setConsoleRunning(false); }
-};
-$('#consoleRerun').onclick = () => {
-  if (lastRunSpec) runExecution(lastRunSpec.path, lastRunSpec.language);
-};
 
 // ---------- run / build ----------
 const ext = p => (p.split('.').pop() || '').toLowerCase();
+function guessLang(path) {
+  const e = ext(path);
+  return { py: 'python', js: 'javascript', sh: 'bash', c: 'c', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', java: 'java', kt: 'kotlin', html: 'html', htm: 'html' }[e] || '';
+}
+
 async function run() {
   if (!project) return;
   try { await saveAll(); } catch (e) { return; }
   const t = tabs[active];
-  let htmlPath = t && ['html', 'htm'].includes(ext(t.path)) ? t.path : null;
-  if (!htmlPath) {
-    try { await call('readFile', { project, path: 'index.html' }); htmlPath = 'index.html'; } catch (e) { /* none */ }
+  if (!t) return toast('Open a file to run.');
+  const lang = projectLang || guessLang(t.path);
+  if (!lang) return toast('Cannot detect language for ' + t.path);
+  await runFile(t.path, lang);
+}
+
+async function runFile(filePath, lang) {
+  lastRunFile = filePath; lastRunLang = lang;
+
+  if (lang === 'html' || lang === 'htm') { previewHtml(filePath); return; }
+
+  // Increment the runId FIRST — any pending callbacks from an old run will see a stale id
+  // and be silently dropped (the streaming handler checks activeConsoleSessionId).
+  activeConsoleSessionId = ++currentRunId;
+
+  // Clear the console BEFORE the new run starts — ensures no old output is visible.
+  const sessionLabel = lang.toUpperCase() + ': ' + filePath.split('/').pop();
+  consoleClear('$ Run ' + filePath);
+  openConsole(); setConsoleRunning(true);
+
+  try {
+    const stdin = $('#consoleStdin').value || null;
+    // Build the command appropriate for this language
+    const cmd = buildRunCommand(filePath, lang);
+    if (!cmd) { consoleWrite('No run command for language: ' + lang, true); setConsoleRunning(false); return; }
+    consoleWrite('$ ' + cmd, false);
+    // Capture this run's id; if another run starts while this await is in flight it will
+    // increment currentRunId and subsequent consoleWrite calls here will be dropped.
+    const myRunId = activeConsoleSessionId;
+    const r = await call('termux.run', { project, path: '', command: cmd, stdin });
+    // Only write result if this is still the current run
+    if (myRunId !== activeConsoleSessionId) return;
+    if (r.stdout && r.stdout.trim()) consoleWrite(r.stdout.trimEnd(), false);
+    if (r.stderr && r.stderr.trim()) consoleWrite(r.stderr.trimEnd(), true);
+    consoleWrite('\nProcess finished with exit code ' + r.exitCode, r.exitCode !== 0);
+  } catch (e) {
+    if (activeConsoleSessionId === currentRunId)
+      consoleWrite('error: ' + e.message, true);
+  } finally {
+    if (activeConsoleSessionId === currentRunId) setConsoleRunning(false);
   }
-  if (htmlPath) return previewHtml(htmlPath);
-  const lang = projectLang || (t ? guessLang(t.path) : '');
-  const file = (t ? t.path : null);
-  if (!lang || !file) { openConsole(); consoleWrite('No runnable file recognized for this language yet.'); return; }
-  await runExecution(file, lang);
 }
-function guessLang(path) {
-  const e = ext(path);
-  return { py: 'python', js: 'javascript', sh: 'bash', c: 'c', cpp: 'cpp', cc: 'cpp', java: 'java', kt: 'kotlin' }[e] || '';
+
+/**
+ * Returns the shell command to run the given source file through Termux.
+ * File paths within the command use ~/storage/shared/... (Termux's view),
+ * constructed from the relative filePath within the current project.
+ */
+function buildRunCommand(filePath, lang) {
+  // Termux sees the project at ~/storage/shared/SARIProjects/<project>/
+  const termuxProjectBase = '~/storage/shared/SARIProjects/' + project;
+  const termuxFile = termuxProjectBase + '/' + filePath;
+  const tmpBin = '/data/data/com.termux/files/usr/tmp/sari_run_' + Date.now();
+  switch (lang) {
+    case 'python': return "python3 '" + termuxFile + "'";
+    case 'javascript': return "node '" + termuxFile + "'";
+    case 'bash': return "bash '" + termuxFile + "'";
+    case 'c':
+      return "clang '" + termuxFile + "' -O2 -o '" + tmpBin + "' 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
+    case 'cpp':
+      return "clang++ '" + termuxFile + "' -O2 -o '" + tmpBin + "' 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
+    case 'java': {
+      const cls = filePath.split('/').pop().replace(/\.java$/, '');
+      const tmpDir = '/data/data/com.termux/files/usr/tmp/sari_java_' + Date.now();
+      return "mkdir -p '" + tmpDir + "' && javac '" + termuxFile + "' -d '" + tmpDir + "' 2>&1 && echo '-- compile OK --' && java -cp '" + tmpDir + "' " + cls;
+    }
+    case 'kotlin': {
+      const tmpJar = '/data/data/com.termux/files/usr/tmp/sari_kotlin_' + Date.now() + '.jar';
+      return "kotlinc '" + termuxFile + "' -include-runtime -d '" + tmpJar + "' 2>&1 && echo '-- compile OK --' && java -jar '" + tmpJar + "'";
+    }
+    default: return null;
+  }
 }
+
 async function previewHtml(path) {
   try {
     let html = await call('readFile', { project, path });
@@ -517,21 +536,18 @@ async function previewHtml(path) {
     for (const m of html.matchAll(/<link[^>]*href=["']([^"':]+\.css)["'][^>]*>/gi)) jobs.push({ tag: m[0], rel: m[1], css: true });
     for (const m of html.matchAll(/<script[^>]*src=["']([^"':]+\.js)["'][^>]*>\s*<\/script>/gi)) jobs.push({ tag: m[0], rel: m[1], css: false });
     for (const j of jobs) {
-      try {
-        const src = await call('readFile', { project, path: norm(j.rel) });
-        html = html.replace(j.tag, () => j.css ? '<style>' + src + '</style>' : '<script>' + src.replace(/<\/script/gi, '<\\/script') + '</script>');
-      } catch (e) { /* leave tag as is */ }
+      try { const src = await call('readFile', { project, path: norm(j.rel) }); html = html.replace(j.tag, () => j.css ? '<style>' + src + '</style>' : '<script>' + src.replace(/<\/script/gi, '<\\/script') + '</script>'); } catch (e) { }
     }
-    $('#frame').srcdoc = html;
-    $('#preview').hidden = false;
+    $('#frame').srcdoc = html; $('#preview').hidden = false;
   } catch (e) { fail(e); }
 }
+
 async function build() {
   if (!project) return;
-  if (!isAndroidProject) { toast('This project has no app/ + settings.gradle, so it cannot produce an APK.'); return; }
+  if (!isAndroidProject) { toast('This project has no app/ + settings.gradle — it cannot produce an APK.'); return; }
   const st = await call('github.status').catch(() => ({ connected: false }));
-  if (!st.connected) { toast('Connect GitHub first to build with GitHub Actions'); return openGithubScreen(); }
-  if (!await modal({ title: 'Build with GitHub Actions', text: 'This pushes every file in "' + project + '" to ' + st.repo + ' (' + st.branch + ') and triggers the Android build workflow.', ok: 'Push & Build' })) return;
+  if (!st.connected) { toast('Connect GitHub first to build with Actions'); return openGithubScreen(); }
+  if (!await modal({ title: 'Build with GitHub Actions', text: 'Pushes "' + project + '" to ' + st.repo + ' (' + st.branch + ') and triggers android-build.yml.', ok: 'Push & Build' })) return;
   try {
     const count = await busy('Pushing project\u2026', () => call('github.pushAll', { project, message: 'Update ' + project + ' via SARI IDE' }));
     toast('Pushed ' + count + ' file(s)');
@@ -574,58 +590,36 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveA
 // GitHub screen
 // ============================================================
 function openGithubScreen() {
-  showScreen('#githubScreen');
-  $('#ghProjName').textContent = project || '(none \u2014 open a project first)';
-  refreshGithubStatus();
+  showScreen('#githubScreen'); $('#ghProjName').textContent = project || '(none)'; refreshGithubStatus();
 }
 $('#ghBack').onclick = closeScreens;
 $('#ghRefresh').onclick = () => refreshGithubStatus();
 async function refreshGithubStatus() {
   try {
     const st = await call('github.status');
-    $('#ghDisconnected').hidden = st.connected;
-    $('#ghConnected').hidden = !st.connected;
-    if (st.connected) {
-      $('#ghStatusLine').textContent = 'Connected as ' + st.username;
-      $('#ghRepoLine').textContent = st.repo + ' \u00b7 branch ' + st.branch;
-      refreshGithubRuns();
-    }
+    $('#ghDisconnected').hidden = st.connected; $('#ghConnected').hidden = !st.connected;
+    if (st.connected) { $('#ghStatusLine').textContent = 'Connected as ' + st.username; $('#ghRepoLine').textContent = st.repo + ' \u00b7 branch ' + st.branch; refreshGithubRuns(); }
   } catch (e) { fail(e); }
 }
 $('#ghConnect').onclick = async () => {
   const username = $('#ghUser').value.trim(), token = $('#ghToken').value, repo = $('#ghRepo').value.trim(), branch = $('#ghBranch').value.trim();
   if (!username || !token || !repo) return toast('Username, token and repository are required');
-  try {
-    await busy('Connecting\u2026', () => call('github.connect', { username, token, repo, branch }));
-    $('#ghToken').value = '';
-    toast('Connected'); refreshGithubStatus();
-  } catch (e) { fail(e); }
+  try { await busy('Connecting\u2026', () => call('github.connect', { username, token, repo, branch })); $('#ghToken').value = ''; toast('Connected'); refreshGithubStatus(); } catch (e) { fail(e); }
 };
-$('#ghDisconnect').onclick = async () => {
-  if (!await modal({ title: 'Disconnect GitHub?', ok: 'Disconnect' })) return;
-  await call('github.disconnect'); refreshGithubStatus();
-};
+$('#ghDisconnect').onclick = async () => { if (!await modal({ title: 'Disconnect GitHub?', ok: 'Disconnect' })) return; await call('github.disconnect'); refreshGithubStatus(); };
 $('#ghImportRepo').onclick = async () => {
-  const name = await modal({ title: 'Import repository as project', text: 'Creates a new local project and pulls every file from the connected repo/branch into it.', value: '' });
+  const name = await modal({ title: 'Import repository as project', text: 'Creates a new local project and pulls every file.', value: '' });
   if (!name || !name.trim()) return;
-  try {
-    const res = await busy('Importing repository\u2026', () => call('github.importRepo', { project: name.trim() }));
-    toast('Imported ' + res.imported + ' file(s)');
-    closeScreens(); await openProject(res.project);
-  } catch (e) { fail(e); }
+  try { const res = await busy('Importing\u2026', () => call('github.importRepo', { project: name.trim() })); toast('Imported ' + res.imported + ' file(s)'); closeScreens(); await openProject(res.project); } catch (e) { fail(e); }
 };
 $('#ghBrowse').onclick = async () => {
   try {
-    const files = await busy('Loading repository files\u2026', () => call('github.listRepoFiles'));
+    const files = await busy('Loading\u2026', () => call('github.listRepoFiles'));
     if (!files.length) return toast('Repository is empty');
-    sheet(files.slice(0, 200).map(f => ({
-      label: f.path, icon: 'file',
-      fn: () => {
-        if (!project) return toast('Open or import a project first');
-        busy('Pulling ' + f.path + '\u2026', () => call('github.pull', { project, path: f.path }))
-          .then(() => refreshTree()).then(() => toast('Pulled ' + f.path)).catch(fail);
-      }
-    })));
+    sheet(files.slice(0, 200).map(f => ({ label: f.path, icon: 'file', fn: () => {
+      if (!project) return toast('Open a project first');
+      busy('Pulling ' + f.path + '\u2026', () => call('github.pull', { project, path: f.path })).then(() => refreshTree()).then(() => toast('Pulled ' + f.path)).catch(fail);
+    }})));
   } catch (e) { fail(e); }
 };
 $('#ghPullAll').onclick = async () => {
@@ -639,18 +633,11 @@ $('#ghPushAll').onclick = async () => {
   try { await saveAll(); const n = await busy('Pushing\u2026', () => call('github.pushAll', { project, message: msg })); toast('Pushed ' + n + ' file(s)'); } catch (e) { fail(e); }
 };
 $('#ghBranches').onclick = async () => {
-  try {
-    const list = await busy('Loading branches\u2026', () => call('github.listBranches'));
-    sheet([...list.map(b => ({ label: b, icon: 'branch', fn: () => toast('Branch "' + b + '" \u2014 reconnect with this branch name to switch to it') })),
-      { label: '+ Create branch\u2026', icon: 'plus', fn: createBranch }]);
-  } catch (e) { fail(e); }
+  try { const list = await busy('Loading\u2026', () => call('github.listBranches')); sheet([...list.map(b => ({ label: b, icon: 'branch', fn: () => toast('Reconnect with branch "' + b + '" to switch') })), { label: '+ Create branch\u2026', icon: 'plus', fn: createBranch }]); } catch (e) { fail(e); }
 };
-async function createBranch() {
-  const name = await modal({ title: 'New branch name', value: '' }); if (!name) return;
-  try { await busy('Creating\u2026', () => call('github.createBranch', { name: name.trim(), from: 'main' })); toast('Branch "' + name + '" created'); } catch (e) { fail(e); }
-}
+async function createBranch() { const name = await modal({ title: 'New branch name', value: '' }); if (!name) return; try { await busy('Creating\u2026', () => call('github.createBranch', { name: name.trim(), from: 'main' })); toast('Branch "' + name + '" created'); } catch (e) { fail(e); } }
 $('#ghTrigger').onclick = async () => {
-  if (!project) return toast('Open the project you want to build first');
+  if (!project) return toast('Open the project first');
   if (!await modal({ title: 'Push & trigger build', text: 'Pushes "' + project + '" then dispatches android-build.yml.', ok: 'Go' })) return;
   try {
     const n = await busy('Pushing\u2026', () => call('github.pushAll', { project, message: 'Update ' + project + ' via SARI IDE' }));
@@ -661,132 +648,109 @@ $('#ghTrigger').onclick = async () => {
 };
 async function refreshGithubRuns() {
   try {
-    const runs = await call('github.listRuns');
-    const box = $('#ghRuns'); box.textContent = '';
+    const runs = await call('github.listRuns'); const box = $('#ghRuns'); box.textContent = '';
     runs.slice(0, 10).forEach(r => {
-      const item = el('div', 'run-item');
-      const t = el('div', 't');
+      const item = el('div', 'run-item'); const t = el('div', 't');
       t.append(el('div', '', '#' + r.run_number + ' \u2014 ' + (r.display_title || r.name || 'build')));
       t.append(el('div', 'muted', new Date(r.created_at).toLocaleString()));
       const badge = el('span', 'badge ' + badgeClass(r), badgeText(r));
-      item.append(t, badge);
-      item.onclick = () => openRunDetail(r.id);
-      box.appendChild(item);
+      item.append(t, badge); item.onclick = () => openRunDetail(r.id); box.appendChild(item);
     });
   } catch (e) { /* not fatal */ }
 }
 function badgeClass(r) { if (r.status !== 'completed') return 'run'; return r.conclusion === 'success' ? 'ok' : 'fail'; }
 function badgeText(r) { return r.status !== 'completed' ? r.status : r.conclusion; }
 
-// ---- run detail ----
-let currentRunId = null, pollTimer = null;
+let ghRunId = null, pollTimer = null;
 function openRunDetail(runId) {
-  currentRunId = runId;
-  showScreen('#runDetail');
-  loadRunDetail();
-  clearInterval(pollTimer);
-  pollTimer = setInterval(loadRunDetail, 6000);
+  ghRunId = runId;
+  clearInterval(pollTimer); pollTimer = setInterval(loadRunDetail, 6000);
 }
 $('#rdBack').onclick = () => { clearInterval(pollTimer); closeScreens(); openGithubScreen(); };
 $('#rdRefresh').onclick = loadRunDetail;
 async function loadRunDetail() {
-  if (!currentRunId) return;
+  if (!ghRunId) return;
   try {
-    const run = await call('github.getRun', { runId: currentRunId });
+    const run = await call('github.getRun', { runId: ghRunId });
     const box = $('#rdStatus'); box.textContent = '';
-    const t = el('div', 't');
-    t.append(el('div', '', 'Run #' + run.run_number), el('div', 'muted', run.status + (run.conclusion ? ' \u00b7 ' + run.conclusion : '')));
+    const t = el('div', 't'); t.append(el('div', '', 'Run #' + run.run_number), el('div', 'muted', run.status + (run.conclusion ? ' \u00b7 ' + run.conclusion : '')));
     box.append(t, el('span', 'badge ' + badgeClass(run), badgeText(run)));
     if (run.status === 'completed') {
       clearInterval(pollTimer);
-      const logs = await call('github.getRunLogs', { runId: currentRunId });
-      $('#rdLogs').textContent = logs;
-      const arts = await call('github.listArtifacts', { runId: currentRunId });
-      const abox = $('#rdArtifacts'); abox.textContent = '';
+      const logs = await call('github.getRunLogs', { runId: ghRunId }); $('#rdLogs').textContent = logs;
+      const arts = await call('github.listArtifacts', { runId: ghRunId }); const abox = $('#rdArtifacts'); abox.textContent = '';
       if (run.conclusion === 'success' && arts.length) {
         abox.appendChild(el('div', 'sectionTitle', 'Artifacts'));
-        arts.forEach(a => {
-          const row = el('div', 'run-item');
-          row.append(el('div', 't', a.name + ' (' + Math.round(a.size_in_bytes / 1024) + ' KB)'));
-          const dl = el('button', 'primary', 'Download');
-          dl.onclick = () => downloadArtifact(a.id);
-          row.appendChild(dl);
-          abox.appendChild(row);
-        });
+        arts.forEach(a => { const row = el('div', 'run-item'); row.append(el('div', 't', a.name + ' (' + Math.round(a.size_in_bytes / 1024) + ' KB)')); const dl = el('button', 'primary', 'Download'); dl.onclick = () => downloadArtifact(a.id); row.appendChild(dl); abox.appendChild(row); });
       }
-    } else {
-      $('#rdLogs').textContent = 'Build is ' + run.status + ' \u2014 logs appear once it completes.';
-    }
+    } else { $('#rdLogs').textContent = 'Build is ' + run.status + ' \u2014 logs appear once it completes.'; }
   } catch (e) { fail(e); }
 }
 async function downloadArtifact(artifactId) {
   if (!project) return toast('Open a project first');
   try {
-    const res = await busy('Downloading artifact\u2026', () => call('github.downloadArtifact', { project, artifactId }));
-    if (res.apks && res.apks.length) {
-      sheet(res.apks.map(p => ({ label: 'Install ' + p.split('/').pop(), icon: 'build', fn: () => call('github.installApk', { path: p }).catch(fail) })));
-    } else {
-      toast('Downloaded to ' + res.extractedTo);
-    }
+    const res = await busy('Downloading\u2026', () => call('github.downloadArtifact', { project, artifactId }));
+    if (res.apks && res.apks.length) { sheet(res.apks.map(p => ({ label: 'Install ' + p.split('/').pop(), icon: 'build', fn: () => call('github.installApk', { path: p }).catch(fail) }))); }
+    else { toast('Downloaded to ' + res.extractedTo); }
   } catch (e) { fail(e); }
 }
 
 // ============================================================
-// Settings / languages
+// Settings / De Linux runtimes
 // ============================================================
 async function openSettings() {
   showScreen('#settingsScreen');
   const diag = await call('termux.diagnostics').catch(() => ({ installed: false, permission: false }));
-  $('#stTermuxWarn').hidden = false;
+  $('#stTermuxWarn').hidden = !!diag.installed;
   $('#stPermWarn').hidden = !diag.installed || !!diag.permission;
-  const de = await call('execution.status').catch(() => ({ status: 'FAILED' }));
-  $('#deLinuxStatus').textContent = de.status + (de.availableRuntimes ? ' — ' + de.availableRuntimes : '');
-  loadLanguages();
+  const arch = await call('arch.info').catch(() => null);
+  if (arch) { const abox = $('#archInfo'); if (abox) abox.textContent = 'Device: ' + arch.primaryAbi + ' (API ' + arch.apiLevel + ', ' + (arch.is64Bit ? '64-bit' : '32-bit') + ')'; }
+  loadDeLinuxRuntimes();
 }
 $('#stBack').onclick = closeScreens;
 $('#stTheme').onclick = () => { const d = document.documentElement, n = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = n; localStorage.setItem('theme', n); };
 $('#stFontUp').onclick = () => { fontSize = Math.min(28, fontSize + 1); localStorage.setItem('fontSize', fontSize); applyFont(); };
 $('#stFontDown').onclick = () => { fontSize = Math.max(10, fontSize - 1); localStorage.setItem('fontSize', fontSize); applyFont(); };
-async function loadLanguages() {
-  const box = $('#langList'); box.textContent = 'Checking installed languages\u2026';
+
+const RUNTIME_LABELS = { python: 'Python 3.11', cpp: 'C / C++ (clang)', javascript: 'Node.js', html: 'HTML (WebView)' };
+async function loadDeLinuxRuntimes() {
+  const box = $('#langList'); box.textContent = '';
+  box.appendChild(el('p', 'muted small', 'Execution uses Termux as the backend. Install languages with pkg inside Termux Terminal, then use Run here.'));
+  // Show what Termux has installed
+  await loadLanguages(box);
+}
+async function verifyRuntime(id, label) {
+  label.textContent = 'Verifying\u2026';
+  try { const r = await call('delinux.verify', { id }); label.textContent = r.ok ? 'READY' : ('FAILED: ' + (r.error || '')); } catch (e) { label.textContent = 'Error: ' + e.message; }
+}
+async function installRuntime(id, btn, label) {
+  if (id !== 'python') {
+    toast('Install this language via Termux: pkg install ' + id);
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'See below\u2026';
+  label.textContent = 'Install via Termux: pkg install python';
+  toast('Open Termux Terminal and run: pkg install python');
+}
+async function loadLanguages(box) {
   try {
     const list = await call('languages.list');
-    box.textContent = '';
     list.forEach(l => {
-      const row = el('div', 'lang-item');
-      const t = el('div', 't'); t.append(el('div', '', l.label));
-      row.appendChild(t);
-      if (l.installed) {
-        t.append(el('div', 'muted', 'Installed (verified)'));
-        if (l.hasPackages) { const pk = el('button', '', 'Packages'); pk.onclick = () => installPackages(l.id, l.label); row.appendChild(pk); }
-      } else if (l.installable) {
-        const b = el('button', 'primary', 'Install');
-        b.onclick = () => installLanguage(l.id, l.label, b);
-        row.appendChild(b);
-      } else {
-        t.append(el('div', 'muted', 'not detected'));
-      }
+      const row = el('div', 'lang-item'); const t = el('div', 't'); t.append(el('div', '', l.label)); row.appendChild(t);
+      if (l.installed) { t.append(el('div', 'muted', 'Termux: Installed')); if (l.hasPackages) { const pk = el('button', '', 'Packages'); pk.onclick = () => installPackages(l.id, l.label); row.appendChild(pk); } }
+      else if (l.installable) { const b = el('button', '', 'Install via Termux'); b.onclick = () => installLanguageViaTermux(l.id, l.label, b); row.appendChild(b); }
+      else { t.append(el('div', 'muted', 'not detected')); }
       box.appendChild(row);
     });
-  } catch (e) { box.textContent = ''; fail(e); }
+  } catch (e) { /* termux not available — skip */ }
 }
-async function installLanguage(id, label, btn) {
+async function installLanguageViaTermux(id, label, btn) {
   btn.disabled = true; btn.textContent = 'Installing\u2026';
-  try {
-    const r = await call('languages.install', { id });
-    if (r.ok) { toast(label + ' installed and verified'); }
-    else { toast('Install did not verify \u2014 opening output'); openConsole(); consoleWrite('$ De Linux install ' + id); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr); }
-    await loadLanguages();
-  } catch (e) { fail(e); btn.disabled = false; btn.textContent = 'Install'; }
+  try { const r = await call('languages.install', { id }); toast(r.ok ? label + ' installed' : 'Install may have failed'); if (!r.ok) { openConsole(); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr, true); } await loadDeLinuxRuntimes(); } catch (e) { fail(e); btn.disabled = false; btn.textContent = 'Install via Termux'; }
 }
 async function installPackages(id, label) {
-  const pkgs = await modal({ title: label + ' packages', text: 'Space-separated, e.g. numpy requests', value: '' });
-  if (!pkgs || !pkgs.trim()) return;
-  try {
-    const r = await busy('Installing packages\u2026', () => call('languages.installPackages', { id, packages: pkgs.trim() }));
-    if (r.ok) toast('Packages installed');
-    else { openConsole(); consoleWrite('$ install packages: ' + pkgs); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr); }
-  } catch (e) { fail(e); }
+  const pkgs = await modal({ title: label + ' packages', text: 'Space-separated', value: '' }); if (!pkgs || !pkgs.trim()) return;
+  try { const r = await busy('Installing packages\u2026', () => call('languages.installPackages', { id, packages: pkgs.trim() })); if (r.ok) toast('Packages installed'); else { openConsole(); if (r.stdout) consoleWrite(r.stdout); if (r.stderr) consoleWrite(r.stderr, true); } } catch (e) { fail(e); }
 }
 
 // ============================================================
@@ -795,16 +759,11 @@ async function installPackages(id, label) {
 function openTerminal() { showScreen('#termuxScreen'); }
 $('#tmBack').onclick = closeScreens;
 $('#tmClear').onclick = () => { $('#tmOutput').textContent = ''; };
-function appendTerm(text) {
-  const box = $('#tmOutput');
-  box.textContent += (box.textContent ? '\n' : '') + text;
-  box.scrollTop = box.scrollHeight;
-}
+function appendTerm(text) { const box = $('#tmOutput'); box.textContent += (box.textContent ? '\n' : '') + text; box.scrollTop = box.scrollHeight; }
 async function termRun() {
   const cmd = $('#tmInput').value.trim(); if (!cmd) return;
   if (!project) { appendTerm('$ ' + cmd + '\n(open a project first so a working directory is set)'); return; }
-  appendTerm('$ ' + cmd);
-  $('#tmInput').value = '';
+  appendTerm('$ ' + cmd); $('#tmInput').value = '';
   try {
     const r = await call('termux.run', { project, path: '', command: cmd });
     if (r.stdout) appendTerm(r.stdout.replace(/\s+$/, ''));
@@ -832,6 +791,4 @@ window.sariBack = () => {
   }
   return false;
 };
-
-applyIcons();
-showHome();
+applyIcons(); showHome();

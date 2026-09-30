@@ -70,7 +70,7 @@
           <span data-icon="console" class="sm-icon"></span><span class="ctitle">Console Output</span>
           <span id="consoleStatus" class="badge run" hidden>running</span>
           <span class="spacer"></span>
-          <button id="cStop" class="ic sm" title="Stop">Stop</button>
+          <button id="cStop" class="ic sm" data-icon="close" title="Stop" hidden></button>
           <button id="cCopy" class="ic sm" data-icon="copy" title="Copy output"></button>
           <button id="cClear" class="ic sm" data-icon="trash" title="Clear"></button>
           <button id="cClose" class="ic sm" data-icon="close" title="Close"></button>
@@ -154,9 +154,9 @@
       <button id="stFontDown">Font -</button>
     </div>
     <div class="sectionTitle">Programming languages</div>
-    <div class="card-item"><div class="t"><div>De Linux</div><div id="deLinuxStatus" class="muted small">Checking runtime…</div></div></div>
-    <p id="stTermuxWarn" class="muted small" hidden>Termux is optional. Use ⋮ → Termux Terminal for the real Termux shell.</p>
-    <p id="stPermWarn" class="muted small" hidden>SARI IDE does not have Termux's RUN_COMMAND permission yet. It is only needed for the optional Termux Terminal.</p>
+    <p id="archInfo" class="muted small"></p>
+    <p id="stTermuxWarn" class="muted small" hidden>Termux was not detected.</p>
+    <p id="stPermWarn" class="muted small" hidden>SARI IDE does not have Termux's RUN_COMMAND permission yet — it will be requested the first time you install or run something.</p>
     <div id="langList" class="list"></div>
   </div>
 </section>

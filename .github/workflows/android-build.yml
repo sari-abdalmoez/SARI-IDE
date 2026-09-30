@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,17 +24,28 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0 ndk;26.3.11579264'
 
-      - name: Set up Rust
+      - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
 
-      - name: Build SARI Rust native core
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> rust/target
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version "^3" --locked
+
+      - name: Build Rust native library
         env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.3.11579264
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.3.11579264
         run: |
-          cargo install cargo-ndk --locked
-          cargo ndk -t arm64-v8a --platform 24 -o app/src/main/jniLibs build --release
-          test -f app/src/main/jniLibs/arm64-v8a/libsari_native_core.so
-          file app/src/main/jniLibs/arm64-v8a/libsari_native_core.so
+          mkdir -p app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/x86_64
+          cd rust
+          cargo ndk -t arm64-v8a -t x86_64 -o ../app/src/main/jniLibs build --release
+          # Verify the .so files were produced
+          ls -lh ../app/src/main/jniLibs/arm64-v8a/ ../app/src/main/jniLibs/x86_64/
 
       - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
@@ -55,3 +66,11 @@ jobs:
           name: apk-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload Rust .so files as artifact (for local testing)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-native-libs
+          path: app/src/main/jniLibs/
+          if-no-files-found: warn

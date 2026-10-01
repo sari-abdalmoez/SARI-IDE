@@ -56,10 +56,8 @@ button.run{color:#66bb6a}
 #sheet{width:100%;max-width:520px;background:var(--panel);border-radius:16px 16px 0 0;padding:8px 0 16px;max-height:70vh;overflow:auto}
 #sheet button{display:block;width:100%;text-align:start;border:0;border-radius:0;background:transparent;padding:14px 20px}
 #sheet button.danger{color:var(--danger)}
-#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;z-index:200;max-width:90vw;font-size:13px}
-
-/* ---- Phase 2 additions: GitHub, Settings, Terminal, run detail ---- */
-#githubScreen,#runDetail,#settingsScreen,#termuxScreen{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;flex-direction:column}
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;z-index:200;max-width:90vw;font-size:12px}
+#githubScreen,#runDetail,#settingsScreen,#termuxScreen,#outputScreen{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;flex-direction:column}
 .screen-body{flex:1;overflow:auto;padding:12px}
 .formCard{padding:4px 4px 16px}
 .formCard h3{margin:6px 0 14px}
@@ -74,7 +72,7 @@ button.block{width:100%;margin-top:16px}
 .badge.ok{color:#66bb6a}
 .badge.fail{color:var(--danger)}
 .badge.run{color:#ffb74d}
-.logbox{background:#000a;color:#c9d6df;font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:50vh}
+.logbox{background:#000a;color:#c9d6df;font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:50vh;min-height:60px}
 .termOut{flex:1;max-height:none;border-radius:0;margin:0}
 #tmInputRow{display:flex;gap:6px;padding:8px;background:var(--panel);border-top:1px solid var(--line)}
 #tmInputRow input{flex:1}
@@ -91,8 +89,6 @@ button.block{width:100%;margin-top:16px}
 #findBar{display:flex;gap:4px;align-items:center;padding:6px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap}
 #findBar input{flex:1;min-width:90px;padding:7px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit}
 #findBar .muted{font-size:11px;white-space:nowrap}
-
-/* ---- Phase 3: icon system, console panel ---- */
 .icon{width:19px;height:19px;display:block;flex-shrink:0}
 button.ic{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px}
 button.ic.sm{min-width:32px;min-height:32px}
@@ -112,8 +108,6 @@ button.primary .icon{width:16px;height:16px}
 #consoleStdinRow{display:flex;gap:6px;padding:6px;background:var(--panel);border-top:1px solid var(--line)}
 #consoleStdinRow input{flex:1;padding:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}
 .termuxNote{padding:6px 10px 0}
-
-/* ---- icon-in-sheet / dynamic icon wrappers ---- */
 .icowrap{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .icowrap svg{width:17px;height:17px}
 #sheet button{display:flex;align-items:center;gap:12px}
@@ -125,3 +119,77 @@ button.primary .icon{width:16px;height:16px}
 #btnConsole.running .icon{animation:pulse 1.1s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 .card-item .icowrap svg{width:17px;height:17px}
+
+/* Output Screen Styling */
+#outputScreen{background:var(--bg)}
+.output-bar{background:var(--panel);border-bottom:1px solid var(--line)}
+.output-body{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.output-welcome{display:flex;align-items:center;justify-content:center;height:100%;font-size:14px}
+#programOutput{flex:1;background:#000a;color:#c9d6df;font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:12px;overflow:auto;white-space:pre-wrap;word-wrap:break-word;border:none;margin:0;border-radius:0}
+#outputError{flex:0 0 auto;max-height:45%;overflow:auto;background:rgba(239,83,80,.05);border-top:1px solid var(--line);padding:12px}
+.error-card{padding:10px 12px;border-radius:8px}
+.error-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:600}
+.error-icon{font-size:18px}
+.error-kind{font-size:13px;color:var(--danger);font-weight:600;margin:4px 0}
+.error-message{font-size:13px;color:var(--fg);margin:6px 0;line-height:1.4}
+.error-detail{font-size:11px;color:var(--muted);margin:4px 0;font-family:monospace}
+.error-detail code{background:var(--panel2);padding:2px 4px;border-radius:3px;color:var(--accent)}
+.error-suggestion{font-size:12px;color:#66bb6a;margin:6px 0 0;padding:6px;background:rgba(102,187,106,.1);border-radius:4px}
+.output-finished{display:none;padding:12px;text-align:center;font-size:13px;color:#66bb6a;background:rgba(102,187,106,.1);border-top:1px solid var(--line)}
+.output-finished:not([hidden]){display:block}
+.output-details{padding:12px;border-top:1px solid var(--line);background:var(--panel2);font-size:12px}
+.output-details summary{cursor:pointer;font-weight:600;padding:4px;color:var(--accent);user-select:none}
+.output-details summary:hover{background:var(--panel)}
+.output-details[open] summary{margin-bottom:8px}
+.detail-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin:8px 0}
+.detail-grid span{color:var(--muted);font-size:11px}
+.detail-grid code{background:var(--bg);padding:2px 4px;border-radius:3px;color:var(--accent);font-family:monospace;white-space:pre-wrap;word-break:break-all}
+#detailStderr{background:var(--bg);color:#c9d6df;font-family:monospace;font-size:11px;padding:8px;border-radius:4px;white-space:pre-wrap;max-height:200px;overflow:auto}
+
+/* VS Code-style Syntax Highlighting */
+.tok{font-style:inherit}
+.tok.kw{color:#569cd6}
+.tok.bi{color:#4ec9b0}
+.tok.str{color:#ce9178}
+.tok.cm{color:#6a9955}
+.tok.num{color:#b5cea8}
+.tok.op{color:#d4d4d4}
+.tok.fn{color:#dcdcaa}
+.tok.cls{color:#4ec9b0}
+.tok.typ{color:#4ec9b0}
+.tok.const{color:#4fc3f7}
+.tok.var{color:#9cdcfe}
+.tok.tag{color:#569cd6}
+.tok.attr{color:#9cdcfe}
+.tok.prop{color:#9cdcfe}
+.tok.sel{color:#d7ba7d}
+.tok.ent{color:#ce9178}
+.tok.rx{color:#ce9178}
+.tok.pp{color:#569cd6}
+.tok.mac{color:#b5cea8}
+.tok.dec{color:#c586c0}
+.tok.ann{color:#c586c0}
+.tok.tpl{color:#ce9178}
+
+[data-theme=light] .tok.kw{color:#0000ff}
+[data-theme=light] .tok.bi{color:#008000}
+[data-theme=light] .tok.str{color:#a31515}
+[data-theme=light] .tok.cm{color:#008000}
+[data-theme=light] .tok.num{color:#098658}
+[data-theme=light] .tok.op{color:#000000}
+[data-theme=light] .tok.fn{color:#795e26}
+[data-theme=light] .tok.cls{color:#267f99}
+[data-theme=light] .tok.typ{color:#267f99}
+[data-theme=light] .tok.const{color:#0070c1}
+[data-theme=light] .tok.var{color:#001080}
+[data-theme=light] .tok.tag{color:#0000ff}
+[data-theme=light] .tok.attr{color:#ff0000}
+[data-theme=light] .tok.prop{color:#001080}
+[data-theme=light] .tok.sel{color:#795e26}
+[data-theme=light] .tok.ent{color:#a31515}
+[data-theme=light] .tok.rx{color:#a31515}
+[data-theme=light] .tok.pp{color:#0000ff}
+[data-theme=light] .tok.mac{color:#098658}
+[data-theme=light] .tok.dec{color:#af00db}
+[data-theme=light] .tok.ann{color:#af00db}
+[data-theme=light] .tok.tpl{color:#a31515}

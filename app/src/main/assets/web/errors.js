@@ -1,281 +1,73 @@
 'use strict';
 
-// ============================================================
-// Error Parser and Cleaner
-// Detects common runtime/compile errors and formats them cleanly
-// ============================================================
-
 const errorParser = (() => {
-  // Error detection patterns
-  const ERROR_PATTERNS = {
-    // Python errors
-    SyntaxError: {
-      pattern: /SyntaxError:\s*([^\n]+)(?:\n\s*File\s+"([^"]+)",\s*line\s+(\d+))?/i,
-      type: 'SyntaxError',
-      extract: (match) => ({
-        message: match[1] || 'Syntax error',
-        file: match[2] || 'unknown',
-        line: match[3] || '?',
-      }),
-    },
-    NameError: {
-      pattern: /NameError:\s*([^\n]+)/i,
-      type: 'NameError',
-      extract: (match) => ({
-        message: match[1] || 'Name error',
-        suggestion: extractSuggestion(match[1]),
-      }),
-    },
-    TypeError: {
-      pattern: /TypeError:\s*([^\n]+)/i,
-      type: 'TypeError',
-      extract: (match) => ({
-        message: match[1] || 'Type error',
-      }),
-    },
-    ValueError: {
-      pattern: /ValueError:\s*([^\n]+)/i,
-      type: 'ValueError',
-      extract: (match) => ({
-        message: match[1] || 'Value error',
-      }),
-    },
-    ImportError: {
-      pattern: /ImportError:\s*([^\n]+)/i,
-      type: 'ImportError',
-      extract: (match) => ({
-        message: match[1] || 'Import error',
-      }),
-    },
-    ModuleNotFoundError: {
-      pattern: /ModuleNotFoundError:\s*([^\n]+)|No module named ['"]([^'"]+)['"]/i,
-      type: 'ModuleNotFoundError',
-      extract: (match) => {
-        const message = match[1] || `No module named '${match[2]}'`;
-        return {
-          message,
-          module: match[2],
-          suggestion: match[2] ? `Try installing: pip install ${match[2]}` : null,
-        };
-      },
-    },
-    FileNotFoundError: {
-      pattern: /FileNotFoundError:\s*([^\n]+)|No such file or directory:\s*['"]?([^'"]+)['"]?/i,
-      type: 'FileNotFoundError',
-      extract: (match) => ({
-        message: match[1] || `File not found: ${match[2]}`,
-        file: match[2],
-      }),
-    },
-    PermissionError: {
-      pattern: /PermissionError:\s*([^\n]+)/i,
-      type: 'PermissionError',
-      extract: (match) => ({
-        message: match[1] || 'Permission denied',
-      }),
-    },
-    IndentationError: {
-      pattern: /IndentationError:\s*([^\n]+)(?:\n\s*File\s+"([^"]+)",\s*line\s+(\d+))?/i,
-      type: 'IndentationError',
-      extract: (match) => ({
-        message: match[1] || 'Indentation error',
-        file: match[2],
-        line: match[3],
-      }),
-    },
-    AttributeError: {
-      pattern: /AttributeError:\s*([^\n]+)/i,
-      type: 'AttributeError',
-      extract: (match) => ({
-        message: match[1] || 'Attribute error',
-      }),
-    },
-    ZeroDivisionError: {
-      pattern: /ZeroDivisionError:\s*([^\n]+)/i,
-      type: 'ZeroDivisionError',
-      extract: (match) => ({
-        message: match[1] || 'Division by zero',
-      }),
-    },
-    RuntimeError: {
-      pattern: /RuntimeError:\s*([^\n]+)/i,
-      type: 'RuntimeError',
-      extract: (match) => ({
-        message: match[1] || 'Runtime error',
-      }),
-    },
-
-    // C/C++ Compilation Errors
-    CompilationError: {
-      pattern: /error:\s*([^\n]+)(?:\n\s*at\s+([^:\s]+):(\d+))?/i,
-      type: 'CompilationError',
-      extract: (match) => ({
-        message: match[1] || 'Compilation error',
-        file: match[2],
-        line: match[3],
-      }),
-    },
-    UndefinedReference: {
-      pattern: /undefined reference to\s+[`']([^'`]+)[`']/i,
-      type: 'UndefinedReference',
-      extract: (match) => ({
-        message: `Undefined reference to '${match[1]}'`,
-        symbol: match[1],
-        suggestion: 'Check that all libraries are linked and symbols are defined',
-      }),
-    },
-    NoSuchFileOrDirectory: {
-      pattern: /([^:]+):\s*No such file or directory/i,
-      type: 'FileNotFoundError',
-      extract: (match) => ({
-        message: `File not found: ${match[1]}`,
-        file: match[1],
-      }),
-    },
-    IncludeNotFound: {
-      pattern: /fatal error:\s*([^:\n]+):\s*No such file or directory/i,
-      type: 'IncludeNotFound',
-      extract: (match) => ({
-        message: `Header file not found: ${match[1]}`,
-        file: match[1],
-        suggestion: 'Check the #include path or install the required library',
-      }),
-    },
-
-    // Java/Kotlin Errors
-    JavaCompilationError: {
-      pattern: /error:\s*([^\n]+)\s+at\s+(\S+):(\d+)/i,
-      type: 'JavaCompilationError',
-      extract: (match) => ({
-        message: match[1],
-        file: match[2],
-        line: match[3],
-      }),
-    },
-
-    // Generic Runtime Crash
-    SegmentationFault: {
-      pattern: /Segmentation fault|SIGSEGV/i,
-      type: 'SegmentationFault',
-      extract: () => ({
-        message: 'Segmentation fault (memory access violation)',
-        suggestion: 'Check array bounds, pointer dereferences, and memory management',
-      }),
-    },
-    AbortSignal: {
-      pattern: /Aborted|SIGABRT/i,
-      type: 'AbortSignal',
-      extract: () => ({
-        message: 'Process aborted',
-      }),
-    },
-  };
-
-  function extractSuggestion(message) {
-    // NameError suggestions
-    if (message.includes('prin')) return 'Did you mean `print`?';
-    if (message.includes('str(')) return 'Did you mean `str()`?';
-    if (message.includes('len(')) return 'Did you mean `len()`?';
-    if (message.includes('range(')) return 'Did you mean `range()`?';
-    if (message.includes('input(')) return 'Did you mean `input()`?';
-    if (message.includes('int(')) return 'Did you mean `int()`?';
-    if (message.includes('float(')) return 'Did you mean `float()`?';
-    if (message.includes('list(')) return 'Did you mean `list()`?';
-    if (message.includes('dict(')) return 'Did you mean `dict()`?';
-    if (message.includes('set(')) return 'Did you mean `set()`?';
-    return null;
+  const patterns = [
+    ['SyntaxError', /(?:SyntaxError|IndentationError):\s*([^\n]+)/i],
+    ['NameError', /NameError:\s*([^\n]+)/i],
+    ['TypeError', /TypeError:\s*([^\n]+)/i],
+    ['ImportError', /ImportError:\s*([^\n]+)/i],
+    ['ModuleNotFoundError', /(?:ModuleNotFoundError:\s*([^\n]+)|No module named ["']([^"']+)["'])/i],
+    ['FileNotFoundError', /FileNotFoundError:\s*([^\n]+)|No such file or directory:\s*["']?([^"'\n]+)["']?/i],
+    ['PermissionError', /PermissionError:\s*([^\n]+)/i],
+    ['ValueError', /ValueError:\s*([^\n]+)/i],
+    ['AttributeError', /AttributeError:\s*([^\n]+)/i],
+    ['CompilationError', /(?:fatal error|error):\s*([^\n]+)/i],
+    ['RuntimeError', /(?:RuntimeError|Segmentation fault|SIGSEGV|SIGABRT):?\s*([^\n]*)/i],
+  ];
+  function parseError(stderr = '', stdout = '', exitCode = 1, filePath = '') {
+    if (Number(exitCode) === 0) return null;
+    const raw = `${stderr}\n${stdout}`;
+    let type = 'RuntimeError', message = stderr.trim() || stdout.trim() || `Process exited with code ${exitCode}`;
+    let match = null;
+    for (const [name, pattern] of patterns) { const found = pattern.exec(raw); if (found) { type = name; match = found; message = found[1] || found[2] || message; break; } }
+    const location = /(?:File\s+["']([^"']+)["'],\s*line\s+(\d+)|([\w./-]+):(\d+)(?::\d+)?)/i.exec(raw);
+    const module = type === 'ModuleNotFoundError' ? (match && (match[2] || (match[1] || '').match(/["']([^"']+)["']/)?.[1])) : null;
+    let suggestion = '';
+    if (type === 'NameError' && /prin/.test(message)) suggestion = 'Did you mean print?';
+    else if (type === 'ModuleNotFoundError' || type === 'ImportError') suggestion = module ? `Install or configure the required package: ${module}` : 'Install or configure the required runtime/package.';
+    else if (type === 'CompilationError') suggestion = 'Check the highlighted source line and required headers or libraries.';
+    return { type, message: message.replace(/^.*?:\s*/, type === 'RuntimeError' ? '' : ''), file: location ? (location[1] || location[3] || filePath) : filePath, line: location ? (location[2] || location[4]) : '', module, suggestion, exitCode: Number(exitCode), rawStderr: stderr, rawStdout: stdout, raw };
   }
-
-  function parseError(stderr, stdout, exitCode) {
-    if (exitCode === 0) return null; // No error
-    if (!stderr && !stdout) return null; // No output
-
-    const combined = stderr + '\n' + stdout;
-
-    // Try each error pattern
-    for (const [key, errorDef] of Object.entries(ERROR_PATTERNS)) {
-      const match = errorDef.pattern.exec(combined);
-      if (match) {
-        return {
-          type: errorDef.type,
-          ...errorDef.extract(match),
-          exitCode,
-          rawStderr: stderr,
-          rawStdout: stdout,
-          rawCombined: combined,
-        };
-      }
-    }
-
-    // Generic error fallback
-    return {
-      type: 'RuntimeError',
-      message: stderr || stdout || `Process exited with code ${exitCode}`,
-      exitCode,
-      rawStderr: stderr,
-      rawStdout: stdout,
-      rawCombined: combined,
-    };
-  }
-
+  function escape(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function renderErrorCard(error) {
-    if (!error) return '';
-
-    const card = el('div', 'error-card');
-    card.innerHTML = `
-      <div class="error-header">
-        <span class="error-icon">⚠️</span>
-        <span class="error-type">${error.type}</span>
-      </div>
-      <div class="error-message">${escapeHtml(error.message)}</div>
-      ${error.file ? `<div class="error-detail">File: <code>${escapeHtml(error.file)}</code></div>` : ''}
-      ${error.line ? `<div class="error-detail">Line: <code>${escapeHtml(error.line)}</code></div>` : ''}
-      ${error.module ? `<div class="error-detail">Module: <code>${escapeHtml(error.module)}</code></div>` : ''}
-      ${error.symbol ? `<div class="error-detail">Symbol: <code>${escapeHtml(error.symbol)}</code></div>` : ''}
-      ${error.suggestion ? `<div class="error-suggestion">💡 ${escapeHtml(error.suggestion)}</div>` : ''}
-    `;
+    const card = document.createElement('div'); card.className = 'error-card';
+    card.innerHTML = `<div class="error-header"><span class="error-icon">⚠</span><strong>Runtime Error</strong></div><div class="error-kind">${escape(error.type)}</div><div class="error-message">${escape(error.message)}</div>${error.file ? `<div class="error-detail">File: <code>${escape(error.file.split('/').pop())}</code></div>` : ''}${error.line ? `<div class="error-detail">Line: <code>${escape(error.line)}</code></div>` : ''}${error.module ? `<div class="error-detail">Module: <code>${escape(error.module)}</code></div>` : ''}${error.suggestion ? `<div class="error-suggestion">Suggestion: ${escape(error.suggestion)}</div>` : ''}`;
     return card;
   }
-
-  function escapeHtml(text) {
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return text.replace(/[&<>"']/g, c => map[c]);
-  }
-
-  function sanitizeOutput(output, filePath) {
-    // Hide Termux internal paths and commands
-    const projectPrefix = '/storage/emulated/0/SARIProjects/';
-    const shortName = filePath.split('/').pop();
-
-    return output
-      .split('\n')
-      .map(line => {
-        // Hide full storage paths
-        if (line.includes(projectPrefix)) {
-          return line.replace(new RegExp(projectPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), 'project/');
-        }
-        // Hide temporary compilation binaries
-        if (line.includes('sari_run_') || line.includes('sari_java_') || line.includes('sari_kotlin_')) {
-          return '';
-        }
-        // Hide compilation success markers from our build system
-        if (line.includes('-- compile OK --')) {
-          return '';
-        }
-        // Hide /data/data paths
-        if (line.includes('/data/data/com.termux/files')) {
-          return line.replace(/\/data\/data\/com\.termux\/files[^ \t]*/g, '[tmp]');
-        }
-        return line;
-      })
-      .filter(line => line.trim())
-      .join('\n');
-  }
-
-  return {
-    parseError,
-    renderErrorCard,
-    sanitizeOutput,
-    ERROR_PATTERNS,
-  };
+  function sanitizeOutput(value = '') { return String(value).split('\n').filter(line => !/^\s*\$\s*(python|python3|node|bash|clang\+?|javac|kotlinc)\b/i.test(line) && !line.includes('-- compile OK --')).map(line => line.replace(/\/storage\/emulated\/0\/SARIProjects\/[^\s"']*/g, '').replace(/\/data\/data\/com\.termux\/files[^\s"']*/g, '[runtime]')).filter(Boolean).join('\n').trim(); }
+  return { parseError, renderErrorCard, sanitizeOutput };
 })();
+
+// Integrate after app.js has installed its existing handlers. The old console remains available from the menu.
+window.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+  const $ = s => document.querySelector(s);
+  const out = $('#outputScreen'); if (!out || typeof runFile !== 'function') return;
+  let last = null, running = false, details = null;
+  const program = $('#programOutput'), error = $('#outputError'), finished = $('#outputFinished'), welcome = $('#outputWelcome');
+  const raw = $('#detailStderr'), exit = $('#detailExitCode'), command = $('#detailCommand'), path = $('#detailPath'), panel = $('#outputDetailsPanel');
+  const show = () => { out.hidden = false; $('#ide').hidden = true; $('#home').hidden = true; };
+  const reset = () => { program.textContent = ''; error.textContent = ''; error.hidden = true; finished.hidden = true; welcome.hidden = true; panel.hidden = true; panel.open = false; };
+  const render = (r, file, cmd) => { const stdout = r?.stdout || '', stderr = r?.stderr || ''; const code = Number(r?.exitCode ?? 1); const clean = sanitizeOutput(stdout); program.textContent = clean; if (code === 0) finished.hidden = false; else { const parsed = parseError(stderr, stdout, code, file); if (parsed) error.appendChild(renderErrorCard(parsed)); error.hidden = false; } raw.textContent = stderr || stdout || ''; exit.textContent = String(code); command.textContent = cmd || ''; path.textContent = file || ''; };
+  const original = window.runFile;
+  window.runFile = async function(file, lang) {
+    last = { file, lang }; reset(); show(); running = true; $('#outStatus').hidden = false; $('#outStop').hidden = false; $('#outTitle').textContent = file.split('/').pop();
+    if (lang === 'html' || lang === 'htm') { running = false; $('#outStatus').hidden = true; $('#outStop').hidden = true; return original.call(this, file, lang); }
+    // Capture the existing backend response while preserving its Termux command construction and security path handling.
+    const oldWrite = window.consoleWrite;
+    let captured = { stdout: '', stderr: '', exitCode: 1 };
+    try {
+      // Existing runFile renders to the legacy console; we mirror its final state by calling the backend directly.
+      const cmd = typeof buildRunCommand === 'function' ? buildRunCommand(file, lang) : '';
+      const r = await call('termux.run', { project, path: '', command: cmd, stdin: $('#consoleStdin')?.value || null });
+      captured = r || captured; render(captured, file, cmd);
+    } catch (e) { captured.stderr = e.message || String(e); render(captured, file, ''); }
+    finally { running = false; $('#outStatus').hidden = true; $('#outStop').hidden = true; }
+  };
+  $('#btnRun').onclick = () => { if (typeof run === 'function') run(); };
+  $('#outBack').onclick = () => { out.hidden = true; $('#ide').hidden = false; };
+  $('#outRerun').onclick = () => { if (last) window.runFile(last.file, last.lang); };
+  $('#outCopy').onclick = async () => { try { await navigator.clipboard.writeText(program.textContent); toast('Copied'); } catch (_) { toast('Copy failed'); } };
+  $('#outClear').onclick = reset;
+  $('#outDetails').onclick = () => { panel.hidden = false; panel.open = !panel.open; };
+  $('#outStop').onclick = () => { running = false; if (typeof activeConsoleSessionId !== 'undefined') activeConsoleSessionId = -1; $('#outStatus').hidden = true; $('#outStop').hidden = true; program.textContent += '\n\nStopped'; };
+}, 0));

@@ -454,7 +454,7 @@ async function run() {
   try { await saveAll(); } catch (e) { return; }
   const t = tabs[active];
   if (!t) return toast('Open a file to run.');
-  const lang = projectLang || guessLang(t.path);
+  const lang = guessLang(t.path) || projectLang;
   if (!lang) return toast('Cannot detect language for ' + t.path);
   await runFile(t.path, lang);
 }
@@ -516,17 +516,17 @@ function buildRunCommand(filePath, lang) {
     case 'bash':
       return "bash '" + termuxFile + "'";
     case 'c':
-      return "clang '" + termuxFile + "' -O2 -o '" + tmpBin + "' 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
+      return "clang '" + termuxFile + "' -O2 -o '" + tmpBin + "' </dev/null 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
     case 'cpp':
-      return "clang++ '" + termuxFile + "' -O2 -o '" + tmpBin + "' 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
+      return "clang++ '" + termuxFile + "' -O2 -o '" + tmpBin + "' </dev/null 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
     case 'java': {
       const cls = filePath.split('/').pop().replace(/\.java$/, '');
       const tmpDir = '/data/data/com.termux/files/usr/tmp/sari_java_' + Date.now();
-      return "mkdir -p '" + tmpDir + "' && javac '" + termuxFile + "' -d '" + tmpDir + "' 2>&1 && echo '-- compile OK --' && java -cp '" + tmpDir + "' " + cls;
+      return "mkdir -p '" + tmpDir + "' && javac '" + termuxFile + "' -d '" + tmpDir + "' </dev/null 2>&1 && echo '-- compile OK --' && java -cp '" + tmpDir + "' " + cls;
     }
     case 'kotlin': {
       const tmpJar = '/data/data/com.termux/files/usr/tmp/sari_kotlin_' + Date.now() + '.jar';
-      return "kotlinc '" + termuxFile + "' -include-runtime -d '" + tmpJar + "' 2>&1 && echo '-- compile OK --' && java -jar '" + tmpJar + "'";
+      return "kotlinc '" + termuxFile + "' -include-runtime -d '" + tmpJar + "' </dev/null 2>&1 && echo '-- compile OK --' && java -jar '" + tmpJar + "'";
     }
     default:
       return null;

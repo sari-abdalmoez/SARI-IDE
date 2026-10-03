@@ -446,7 +446,24 @@ function setConsoleRunning(on) {
 const ext = p => (p.split('.').pop() || '').toLowerCase();
 function guessLang(path) {
   const e = ext(path);
-  return { py: 'python', js: 'javascript', sh: 'bash', c: 'c', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', java: 'java', kt: 'kotlin', html: 'html', htm: 'html' }[e] || '';
+  return {
+    py: 'python',
+    js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+    sh: 'bash', bash: 'bash',
+    c: 'c',
+    cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hxx: 'cpp',
+    java: 'java',
+    kt: 'kotlin', kts: 'kotlin',
+    rs: 'rust',
+    go: 'go',
+    ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
+    php: 'php',
+    rb: 'ruby',
+    lua: 'lua',
+    dart: 'dart',
+    pl: 'perl', pm: 'perl',
+    html: 'html', htm: 'html'
+  }[e] || '';
 }
 
 async function run() {
@@ -463,6 +480,23 @@ async function runFile(filePath, lang) {
   lastRunFile = filePath; lastRunLang = lang;
 
   if (lang === 'html' || lang === 'htm') { previewHtml(filePath); return; }
+
+  // Verify the exact compiler/runtime required by this source file.
+  try {
+    const runtime = await call('languages.check', { id: lang });
+    if (!runtime || !runtime.ok) {
+      const name = runtime && runtime.label ? runtime.label : lang;
+      const detail = runtime && (runtime.error || runtime.version)
+        ? ': ' + (runtime.error || runtime.version)
+        : '';
+      toast(name + ' is not installed' + detail);
+      openSettings();
+      return;
+    }
+  } catch (e) {
+    toast('Cannot verify ' + lang + ': ' + e.message);
+    return;
+  }
 
   // Increment the runId FIRST — any pending callbacks from an old run will see a stale id
   // and be silently dropped (the streaming handler checks activeConsoleSessionId).
@@ -515,8 +549,12 @@ function buildRunCommand(filePath, lang) {
   const termuxFile = termuxProjectBase + '/' + filePath;
   const qFile = shellQuote(termuxFile);
   const stamp = Date.now();
-  const tmpBin = '/data/data/com.termux/files/usr/tmp/sari_run_' + stamp;
+
+  const tmpRoot = '/data/data/com.termux/files/usr/tmp';
+  const tmpBin = tmpRoot + '/sari_run_' + stamp;
   const qBin = shellQuote(tmpBin);
+
+  const cleanupBin = "; status=$?; rm -f " + qBin + "; exit $status";
 
   switch (lang) {
     case 'python':
@@ -525,6 +563,21 @@ function buildRunCommand(filePath, lang) {
     case 'javascript':
       return "node " + qFile;
 
+    case 'typescript': {
+      const tmpDir = tmpRoot + '/sari_ts_' + stamp;
+      const qDir = shellQuote(tmpDir);
+      const base = filePath.split('/').pop().replace(/\.(tsx?|mts|cts)$/i, '');
+      const qBase = shellQuote(base + '.js');
+
+      return "mkdir -p " + qDir +
+        " && tsc " + qFile +
+        " --target ES2020 --module commonjs --outDir " + qDir +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        "jsout=$(find " + qDir + " -type f -name " + qBase + " -print -quit); " +
+        "[ -n \"$jsout\" ] || { echo 'TypeScript output not found' >&2; exit 1; }; " +
+        "node \"$jsout\"; status=$?; rm -rf " + qDir + "; exit $status";
+    }
+
     case 'bash':
       return "bash " + qFile;
 
@@ -532,58 +585,67 @@ function buildRunCommand(filePath, lang) {
       return "clang " + qFile +
         " -O2 -o " + qBin +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+        qBin + cleanupBin;
 
     case 'cpp':
       return "clang++ " + qFile +
-        " -O2 -o " + qBin +
+        " -O2 -std=c++17 -o " + qBin +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+        qBin + cleanupBin;
 
-    case 'rust':
-      return "rustc " + qFile +
+    case 'rust': {
+      const cargoFile = termuxProjectBase + '/Cargo.toml';
+      const qCargo = shellQuote(cargoFile);
+
+      return "[ -f " + qCargo + " ] && " +
+        "cd " + shellQuote(termuxProjectBase) +
+        " && cargo run || " +
+        "(rustc " + qFile +
         " -O -o " + qBin +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+        qBin + cleanupBin + ")";
+    }
 
-    case 'go':
-      return "go build -o " + qBin + " " + qFile +
+    case 'go': {
+      const goMod = termuxProjectBase + '/go.mod';
+      const qGoMod = shellQuote(goMod);
+
+      return "[ -f " + qGoMod + " ] && " +
+        "cd " + shellQuote(termuxProjectBase) +
+        " && go run . || " +
+        "(go build -o " + qBin + " " + qFile +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+        qBin + cleanupBin + ")";
+    }
 
     case 'java': {
-      const cls = filePath.split('/').pop().replace(/\.java$/, '');
-      const tmpDir = '/data/data/com.termux/files/usr/tmp/sari_java_' + stamp;
+      const cls = filePath.split('/').pop().replace(/\.java$/i, '');
+      const tmpDir = tmpRoot + '/sari_java_' + stamp;
       const qDir = shellQuote(tmpDir);
-      const qCls = shellQuote(cls);
+      const qClassName = shellQuote(cls);
+
       return "mkdir -p " + qDir +
-        " && javac " + qFile + " -d " + qDir +
+        " && find " + shellQuote(termuxProjectBase) +
+        " -type f -name '*.java' -print0 | " +
+        "xargs -0 javac -d " + qDir +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        "java -cp " + qDir + " " + qCls +
-        "; status=$?; rm -rf " + qDir + "; exit $status";
+        "pkgname=$(sed -nE 's/^[[:space:]]*package[[:space:]]+([^;[:space:]]+)[[:space:]]*;.*/\\1/p' " +
+        qFile + " | head -n1); " +
+        "mainclass=" + qClassName + "; " +
+        "[ -n \"$pkgname\" ] && mainclass=\"$pkgname.$mainclass\"; " +
+        "java -cp " + qDir + " \"$mainclass\"; " +
+        "status=$?; rm -rf " + qDir + "; exit $status";
     }
 
     case 'kotlin': {
-      const tmpJar = '/data/data/com.termux/files/usr/tmp/sari_kotlin_' + stamp + '.jar';
+      const tmpJar = tmpRoot + '/sari_kotlin_' + stamp + '.jar';
       const qJar = shellQuote(tmpJar);
+
       return "kotlinc " + qFile +
         " -include-runtime -d " + qJar +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
         "java -jar " + qJar +
         "; status=$?; rm -f " + qJar + "; exit $status";
-    }
-
-    case 'typescript': {
-      const tmpDir = '/data/data/com.termux/files/usr/tmp/sari_ts_' + stamp;
-      const qDir = shellQuote(tmpDir);
-      const base = filePath.split('/').pop().replace(/\.(tsx?|mts|cts)$/i, '');
-      const qOut = shellQuote(tmpDir + '/' + base + '.js');
-      return "mkdir -p " + qDir +
-        " && tsc " + qFile +
-        " --target ES2020 --module commonjs --outDir " + qDir +
-        " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        "node " + qOut +
-        "; status=$?; rm -rf " + qDir + "; exit $status";
     }
 
     case 'php':
@@ -593,7 +655,8 @@ function buildRunCommand(filePath, lang) {
       return "ruby " + qFile;
 
     case 'lua':
-      return "lua5.4 " + qFile;
+      return "(command -v lua5.4 || command -v lua) >/dev/null 2>&1 && " +
+        "LUA=$(command -v lua5.4 || command -v lua); \"$LUA\" " + qFile;
 
     case 'dart':
       return "dart run " + qFile;
@@ -608,7 +671,6 @@ function buildRunCommand(filePath, lang) {
       return null;
   }
 }
-
 async function previewHtml(path) {
   try {
     let html = await call('readFile', { project, path });

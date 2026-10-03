@@ -202,6 +202,7 @@ class NativeBridge(
         }
 
         // ---- languages (via Termux — for the Termux Terminal path only) ----
+        "languages.check" -> LanguageManager.check(context, a.getString("id"))
         "languages.list" -> LanguageManager.list(context)
         "languages.install" -> LanguageManager.install(context, a.getString("id"))
         "languages.installPackages" -> LanguageManager.installPackages(context, a.getString("id"), a.getString("packages"))

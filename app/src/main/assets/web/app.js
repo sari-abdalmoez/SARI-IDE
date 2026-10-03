@@ -611,8 +611,8 @@ function buildRunCommand(filePath, lang) {
     case 'cpp':
       return "clang++ " + qFile +
         " -std=c++17 -o " + qBin +
-        " </dev/null 2>&1 && echo '-- compile OK --' &&
-        " + qBin + cleanupBin;
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        qBin + cleanupBin;
 
     case 'rust': {
       const normalized = filePath.replace(/^\.\/+/, '');

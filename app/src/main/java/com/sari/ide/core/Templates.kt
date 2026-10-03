@@ -57,6 +57,30 @@ int main() {
         "kotlin" to Template("kotlin", "Main.kt", mapOf(
             "Main.kt" to "fun main() {\n    println(\"Hello from SARI IDE\")\n}\n"
         )),
+        "rust" to Template("rust", "main.rs", mapOf(
+            "main.rs" to "fn main() {\n    println!(\"Hello from SARI IDE\");\n}\n"
+        )),
+        "go" to Template("go", "main.go", mapOf(
+            "main.go" to "package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello from SARI IDE\")\n}\n"
+        )),
+        "typescript" to Template("typescript", "main.ts", mapOf(
+            "main.ts" to "console.log(\"Hello from SARI IDE\");\n"
+        )),
+        "php" to Template("php", "main.php", mapOf(
+            "main.php" to "<?php\necho \"Hello from SARI IDE\\n\";\n"
+        )),
+        "ruby" to Template("ruby", "main.rb", mapOf(
+            "main.rb" to "puts \"Hello from SARI IDE\"\n"
+        )),
+        "lua" to Template("lua", "main.lua", mapOf(
+            "main.lua" to "print(\"Hello from SARI IDE\")\n"
+        )),
+        "dart" to Template("dart", "main.dart", mapOf(
+            "main.dart" to "void main() {\n  print('Hello from SARI IDE');\n}\n"
+        )),
+        "perl" to Template("perl", "main.pl", mapOf(
+            "main.pl" to "print \"Hello from SARI IDE\\n\";\n"
+        )),
         "bash" to Template("bash", "main.sh", mapOf(
             "main.sh" to "#!/bin/sh\necho \"Hello from SARI IDE\"\n"
         )),

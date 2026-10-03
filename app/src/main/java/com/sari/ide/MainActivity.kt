@@ -85,13 +85,59 @@ class MainActivity : AppCompatActivity(), DocumentPicker, SystemActions {
         }
     }
     private fun projectsRootDir(): File {
-        // Always use the primary shared external storage so Termux can reach the same files
-        // via its ~/storage/shared symlink.  We always use this path — not app-private scoped
-        // storage — because /storage/emulated/0/Android/data/com.sari.ide/... is NOT
-        // accessible to Termux even when allow-external-apps=true is set.
+        // One canonical project location shared with Termux:
+        // /storage/emulated/0/SARIProjects
         val root = File(Environment.getExternalStorageDirectory(), "SARIProjects")
         root.mkdirs()
+
+        // Older SARI IDE builds used app-private/scoped locations. Migrate those
+        // projects forward without overwriting anything already present in the
+        // canonical directory.
+        migrateLegacyProjects(root)
+
         return root
+    }
+
+    private fun migrateLegacyProjects(root: File) {
+        val legacyRoots = listOf(
+            File(filesDir, "SARIProjects"),
+            File(
+                Environment.getExternalStorageDirectory(),
+                "Android/data/$packageName/files/SARIProjects"
+            )
+        )
+
+        val canonical = try { root.canonicalFile } catch (_: Exception) { root.absoluteFile }
+
+        for (legacy in legacyRoots) {
+            try {
+                if (!legacy.isDirectory) continue
+                val old = legacy.canonicalFile
+                if (old == canonical) continue
+
+                old.listFiles()?.forEach { src ->
+                    copyMissingTree(src, File(root, src.name))
+                }
+            } catch (_: Exception) {
+                // Migration is best-effort; normal project access continues.
+            }
+        }
+    }
+
+    private fun copyMissingTree(src: File, dst: File) {
+        try {
+            if (src.isDirectory) {
+                if (!dst.exists()) dst.mkdirs()
+                src.listFiles()?.forEach { child ->
+                    copyMissingTree(child, File(dst, child.name))
+                }
+            } else if (src.isFile && !dst.exists()) {
+                dst.parentFile?.mkdirs()
+                src.copyTo(dst, overwrite = false)
+            }
+        } catch (_: Exception) {
+            // Keep migration best-effort and never block app startup.
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

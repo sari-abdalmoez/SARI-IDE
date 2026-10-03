@@ -501,33 +501,109 @@ async function runFile(filePath, lang) {
  * File paths within the command use ~/storage/shared/... (Termux's view),
  * constructed from the relative filePath within the current project.
  */
+function shellQuote(v) {
+  return "'" + String(v).replace(/'/g, "'\\''") + "'";
+}
+
+/**
+ * One runner per language.
+ * Compiled languages use their own compiler and write temporary executables
+ * inside Termux private storage. Interpreted languages use their interpreter.
+ */
 function buildRunCommand(filePath, lang) {
-  // Use the real shared-storage path directly.
-  // Do NOT use ~/storage/shared/... because ~ does not expand inside quotes.
   const termuxProjectBase = '/storage/emulated/0/SARIProjects/' + project;
   const termuxFile = termuxProjectBase + '/' + filePath;
-  const tmpBin = '/data/data/com.termux/files/usr/tmp/sari_run_' + Date.now();
+  const qFile = shellQuote(termuxFile);
+  const stamp = Date.now();
+  const tmpBin = '/data/data/com.termux/files/usr/tmp/sari_run_' + stamp;
+  const qBin = shellQuote(tmpBin);
 
   switch (lang) {
     case 'python':
-      return "python3 '" + termuxFile + "'";
+      return "python3 " + qFile;
+
     case 'javascript':
-      return "node '" + termuxFile + "'";
+      return "node " + qFile;
+
     case 'bash':
-      return "bash '" + termuxFile + "'";
+      return "bash " + qFile;
+
     case 'c':
-      return "clang '" + termuxFile + "' -O2 -o '" + tmpBin + "' </dev/null 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
+      return "clang " + qFile +
+        " -O2 -o " + qBin +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+
     case 'cpp':
-      return "clang++ '" + termuxFile + "' -O2 -o '" + tmpBin + "' </dev/null 2>&1 && echo '-- compile OK --' && '" + tmpBin + "'";
+      return "clang++ " + qFile +
+        " -O2 -o " + qBin +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+
+    case 'rust':
+      return "rustc " + qFile +
+        " -O -o " + qBin +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+
+    case 'go':
+      return "go build -o " + qBin + " " + qFile +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        qBin + "; status=$?; rm -f " + qBin + "; exit $status";
+
     case 'java': {
       const cls = filePath.split('/').pop().replace(/\.java$/, '');
-      const tmpDir = '/data/data/com.termux/files/usr/tmp/sari_java_' + Date.now();
-      return "mkdir -p '" + tmpDir + "' && javac '" + termuxFile + "' -d '" + tmpDir + "' </dev/null 2>&1 && echo '-- compile OK --' && java -cp '" + tmpDir + "' " + cls;
+      const tmpDir = '/data/data/com.termux/files/usr/tmp/sari_java_' + stamp;
+      const qDir = shellQuote(tmpDir);
+      const qCls = shellQuote(cls);
+      return "mkdir -p " + qDir +
+        " && javac " + qFile + " -d " + qDir +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        "java -cp " + qDir + " " + qCls +
+        "; status=$?; rm -rf " + qDir + "; exit $status";
     }
+
     case 'kotlin': {
-      const tmpJar = '/data/data/com.termux/files/usr/tmp/sari_kotlin_' + Date.now() + '.jar';
-      return "kotlinc '" + termuxFile + "' -include-runtime -d '" + tmpJar + "' </dev/null 2>&1 && echo '-- compile OK --' && java -jar '" + tmpJar + "'";
+      const tmpJar = '/data/data/com.termux/files/usr/tmp/sari_kotlin_' + stamp + '.jar';
+      const qJar = shellQuote(tmpJar);
+      return "kotlinc " + qFile +
+        " -include-runtime -d " + qJar +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        "java -jar " + qJar +
+        "; status=$?; rm -f " + qJar + "; exit $status";
     }
+
+    case 'typescript': {
+      const tmpDir = '/data/data/com.termux/files/usr/tmp/sari_ts_' + stamp;
+      const qDir = shellQuote(tmpDir);
+      const base = filePath.split('/').pop().replace(/\.(tsx?|mts|cts)$/i, '');
+      const qOut = shellQuote(tmpDir + '/' + base + '.js');
+      return "mkdir -p " + qDir +
+        " && tsc " + qFile +
+        " --target ES2020 --module commonjs --outDir " + qDir +
+        " </dev/null 2>&1 && echo '-- compile OK --' && " +
+        "node " + qOut +
+        "; status=$?; rm -rf " + qDir + "; exit $status";
+    }
+
+    case 'php':
+      return "php " + qFile;
+
+    case 'ruby':
+      return "ruby " + qFile;
+
+    case 'lua':
+      return "lua5.4 " + qFile;
+
+    case 'dart':
+      return "dart run " + qFile;
+
+    case 'perl':
+      return "perl " + qFile;
+
+    case 'html':
+      return null;
+
     default:
       return null;
   }

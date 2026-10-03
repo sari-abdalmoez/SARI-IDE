@@ -49,7 +49,7 @@ object TermuxBridge {
     }
 
     /** stdin is optional: RUN_COMMAND has no live interactive channel, so it's piped in up front (see README). */
-    suspend fun run(context: Context, command: String, cwd: String?, timeoutMs: Long = 120_000, stdin: String? = null): JSONObject {
+    suspend fun run(context: Context, command: String, cwd: String?, timeoutMs: Long = 90_000, stdin: String? = null): JSONObject {
         if (!isInstalled(context)) {
             return err("Termux is not installed on this device. Install the F-Droid or GitHub-release build of Termux (the Play Store build is outdated and incompatible with this integration).")
         }
@@ -65,9 +65,18 @@ object TermuxBridge {
         val deferred = CompletableDeferred<JSONObject>()
         pending[id] = deferred
 
-        val resultIntent = Intent(context, TermuxResultReceiver::class.java).putExtra("req_id", id)
-        val flags = PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        val pi = PendingIntent.getBroadcast(context, id, resultIntent, flags)
+        val resultIntent = Intent(context, TermuxResultReceiver::class.java)
+            .putExtra("req_id", id)
+
+        val flags =
+            PendingIntent.FLAG_ONE_SHOT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_MUTABLE
+            } else {
+                0
+            }
+
+        val pi = PendingIntent.getService(context, id, resultIntent, flags)
 
         val workdir = cwd ?: HOME
         val fullCommand = if (stdin != null) {
@@ -87,7 +96,7 @@ object TermuxBridge {
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(context, intent)
+                context.startService(intent)
             } else {
                 context.startService(intent)
             }

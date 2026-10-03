@@ -273,7 +273,35 @@ async function importFolder() {
 }
 
 // ---------- editor ----------
-const ed = $('#ed'), gutter = $('#gutter');
+const ed = $('#ed'), gutter = $('#gutter'), syntaxLayer = $('#syntaxLayer');
+
+function editorLanguage() {
+  const t = tabs[active];
+  if (!t) return '';
+  return syntaxHighlighter.getLanguageFromFilePath(t.path);
+}
+
+function syncSyntaxLayer() {
+  if (!syntaxLayer) return;
+  syntaxLayer.scrollTop = ed.scrollTop;
+  syntaxLayer.scrollLeft = ed.scrollLeft;
+}
+
+function updateSyntax() {
+  if (!syntaxLayer) return;
+  const code = ed.value || '';
+  const lang = editorLanguage();
+
+  if (!lang || !syntaxHighlighter || typeof syntaxHighlighter.highlightCode !== 'function') {
+    syntaxLayer.textContent = code;
+  } else {
+    syntaxLayer.innerHTML = syntaxHighlighter.highlightCode(code, lang);
+  }
+
+  syncSyntaxLayer();
+}
+
+
 function updateGutter() {
   const n = ed.value.split('\n').length;
   let s = ''; for (let i = 1; i <= n; i++) s += i + '\n';
@@ -287,8 +315,13 @@ function updateStatus() {
   $('#stPos').textContent = 'Ln ' + before.length + ', Col ' + (before[before.length - 1].length + 1);
 }
 function showActive() {
-  const t = tabs[active]; $('#empty').hidden = !!t; ed.value = t ? t.content : ''; ed.disabled = !t;
-  updateGutter(); updateStatus();
+  const t = tabs[active];
+  $('#empty').hidden = !!t;
+  ed.value = t ? t.content : '';
+  ed.disabled = !t;
+  updateGutter();
+  updateSyntax();
+  updateStatus();
 }
 function renderTabs() {
   const box = $('#tabs'); box.textContent = '';
@@ -324,10 +357,15 @@ ed.addEventListener('input', () => {
   const t = tabs[active]; if (!t) return;
   t.content = ed.value;
   if (!t.dirty) { t.dirty = true; renderTabs(); }
-  updateGutter(); updateStatus();
+  updateGutter();
+  updateSyntax();
+  updateStatus();
   if (autoSave) { clearTimeout(saveTimer); saveTimer = setTimeout(() => saveTab(t).catch(() => {}), 1500); }
 });
-ed.addEventListener('scroll', () => { gutter.scrollTop = ed.scrollTop; });
+ed.addEventListener('scroll', () => {
+  gutter.scrollTop = ed.scrollTop;
+  syncSyntaxLayer();
+});
 ed.addEventListener('keyup', updateStatus);
 ed.addEventListener('click', updateStatus);
 function insert(text) { ed.focus(); if (!document.execCommand('insertText', false, text)) ed.setRangeText(text, ed.selectionStart, ed.selectionEnd, 'end'); ed.dispatchEvent(new Event('input')); }
@@ -481,23 +519,6 @@ async function runFile(filePath, lang) {
 
   if (lang === 'html' || lang === 'htm') { previewHtml(filePath); return; }
 
-  // Verify the exact compiler/runtime required by this source file.
-  try {
-    const runtime = await call('languages.check', { id: lang });
-    if (!runtime || !runtime.ok) {
-      const name = runtime && runtime.label ? runtime.label : lang;
-      const detail = runtime && (runtime.error || runtime.version)
-        ? ': ' + (runtime.error || runtime.version)
-        : '';
-      toast(name + ' is not installed' + detail);
-      openSettings();
-      return;
-    }
-  } catch (e) {
-    toast('Cannot verify ' + lang + ': ' + e.message);
-    return;
-  }
-
   // Increment the runId FIRST — any pending callbacks from an old run will see a stale id
   // and be silently dropped (the streaming handler checks activeConsoleSessionId).
   activeConsoleSessionId = ++currentRunId;
@@ -583,27 +604,37 @@ function buildRunCommand(filePath, lang) {
 
     case 'c':
       return "clang " + qFile +
-        " -O2 -o " + qBin +
+        " -o " + qBin +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
         qBin + cleanupBin;
 
     case 'cpp':
       return "clang++ " + qFile +
-        " -O2 -std=c++17 -o " + qBin +
-        " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        qBin + cleanupBin;
+        " -std=c++17 -o " + qBin +
+        " </dev/null 2>&1 && echo '-- compile OK --' &&
+        " + qBin + cleanupBin;
 
     case 'rust': {
+      const normalized = filePath.replace(/^\.\/+/, '');
       const cargoFile = termuxProjectBase + '/Cargo.toml';
       const qCargo = shellQuote(cargoFile);
 
-      return "[ -f " + qCargo + " ] && " +
-        "cd " + shellQuote(termuxProjectBase) +
-        " && cargo run || " +
-        "(rustc " + qFile +
-        " -O -o " + qBin +
+      if (normalized === 'src/main.rs') {
+        return "if [ -f " + qCargo + " ]; then " +
+          "cd " + shellQuote(termuxProjectBase) +
+          " && cargo run --quiet; " +
+          "else " +
+          "rustc " + qFile +
+          " -o " + qBin +
+          " </dev/null 2>&1 && echo '-- compile OK --' && " +
+          qBin + cleanupBin +
+          "; fi";
+      }
+
+      return "rustc " + qFile +
+        " -o " + qBin +
         " </dev/null 2>&1 && echo '-- compile OK --' && " +
-        qBin + cleanupBin + ")";
+        qBin + cleanupBin;
     }
 
     case 'go': {

@@ -34,9 +34,6 @@
             </intent-filter>
         </activity>
 
-        <receiver
-            android:name=".bridge.TermuxResultReceiver"
-            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -47,5 +44,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+            <service android:name=".bridge.TermuxResultReceiver" android:exported="false" />
     </application>
 </manifest>

@@ -32,7 +32,66 @@ button.run{color:#66bb6a}
 .tab .x{padding:6px;color:var(--muted)}.dot{color:var(--accent)}
 #editorWrap{flex:1;display:flex;min-height:0;position:relative;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--font);line-height:1.5}
 #gutter{margin:0;padding:8px 8px 8px 6px;min-width:44px;text-align:right;color:var(--muted);background:var(--panel);overflow:hidden;user-select:none;font:inherit;line-height:inherit}
-#ed{flex:1;border:0;outline:0;resize:none;padding:8px;background:var(--bg);color:var(--fg);font:inherit;line-height:inherit;tab-size:4;white-space:pre;overflow:auto}
+#syntaxLayer{
+position:absolute;
+left:44px;
+right:0;
+top:0;
+bottom:0;
+margin:0;
+padding:8px;
+background:transparent;
+color:var(--fg);
+font:inherit;
+line-height:inherit;
+tab-size:4;
+white-space:pre;
+overflow:hidden;
+pointer-events:none;
+z-index:1;
+}
+#syntaxLayer .tok{white-space:pre}
+#ed{
+position:relative;
+z-index:2;
+flex:1;
+border:0;
+outline:0;
+resize:none;
+padding:8px;
+background:transparent;
+color:transparent;
+-webkit-text-fill-color:transparent;
+caret-color:var(--fg);
+font:inherit;
+line-height:inherit;
+tab-size:4;
+white-space:pre;
+overflow:auto;
+}
+#ed::selection{background:rgba(79,195,247,.28);color:transparent;-webkit-text-fill-color:transparent}
+.tok.kw{color:#569cd6}
+.tok.bi{color:#4ec9b0}
+.tok.str{color:#ce9178}
+.tok.cm{color:#6a9955}
+.tok.num{color:#b5cea8}
+.tok.op{color:#d4d4d4}
+.tok.fn{color:#dcdcaa}
+.tok.cls{color:#4ec9b0}
+.tok.typ{color:#4ec9b0}
+.tok.const{color:#569cd6}
+.tok.var{color:#9cdcfe}
+.tok.tag{color:#569cd6}
+.tok.attr{color:#9cdcfe}
+.tok.prop{color:#9cdcfe}
+.tok.sel{color:#d7ba7d}
+.tok.ent{color:#4ec9b0}
+.tok.rx{color:#d16969}
+.tok.pp{color:#c586c0}
+.tok.mac{color:#c586c0}
+.tok.dec{color:#dcdcaa}
+.tok.ann{color:#dcdcaa}
+.tok.tpl{color:#ce9178}
 #empty{position:absolute;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:system-ui}
 #keys{display:flex;gap:4px;overflow-x:auto;padding:4px;background:var(--panel);border-top:1px solid var(--line)}
 #keys button{padding:6px 12px;min-width:38px;font-family:monospace}
@@ -177,6 +236,22 @@ button.primary .icon{width:16px;height:16px}
 [data-theme=light] .tok.cm{color:#008000}
 [data-theme=light] .tok.num{color:#098658}
 [data-theme=light] .tok.op{color:#000000}
+[data-theme=light] .tok.fn{color:#795e26}
+[data-theme=light] .tok.cls{color:#267f99}
+[data-theme=light] .tok.typ{color:#267f99}
+[data-theme=light] .tok.const{color:#0000ff}
+[data-theme=light] .tok.var{color:#001080}
+[data-theme=light] .tok.tag{color:#800000}
+[data-theme=light] .tok.attr{color:#ff0000}
+[data-theme=light] .tok.prop{color:#001080}
+[data-theme=light] .tok.sel{color:#795e26}
+[data-theme=light] .tok.ent{color:#267f99}
+[data-theme=light] .tok.rx{color:#811f3f}
+[data-theme=light] .tok.pp{color:#af00db}
+[data-theme=light] .tok.mac{color:#af00db}
+[data-theme=light] .tok.dec{color:#795e26}
+[data-theme=light] .tok.ann{color:#795e26}
+[data-theme=light] .tok.tpl{color:#a31515}
 [data-theme=light] .tok.fn{color:#795e26}
 [data-theme=light] .tok.cls{color:#267f99}
 [data-theme=light] .tok.typ{color:#267f99}
